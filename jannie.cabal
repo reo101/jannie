@@ -1,0 +1,64 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.35.2.
+--
+-- see: https://github.com/sol/hpack
+
+name:           jannie
+version:        0.1.0.0
+synopsis:       A discord bot
+description:    See https://hackage.haskell.org/package/jannie/docs/Jannie.html
+author:         reo101
+maintainer:     reo101
+copyright:      2023 reo101
+license:        MIT
+license-file:   LICENSE
+build-type:     Simple
+
+library
+  exposed-modules:
+      ExampleUtils
+      Jannie
+  other-modules:
+      Paths_jannie
+  hs-source-dirs:
+      lib
+  ghc-options: -Wall
+  build-depends:
+      base ==4.*
+    , bytestring
+    , containers
+    , discord-haskell ==1.15.6
+    , emojis ==0.1.3
+    , text
+    , unliftio
+  default-language: Haskell2010
+
+executable jannie
+  main-is: Main.hs
+  other-modules:
+      Paths_jannie
+  hs-source-dirs:
+      app
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base ==4.*
+    , jannie
+  default-language: Haskell2010
+
+test-suite jannie-test
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Jannie.Test.NameTest
+      Paths_jannie
+  hs-source-dirs:
+      test
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base ==4.*
+    , hedgehog >=1.1 && <1.3
+    , jannie
+    , tasty ==1.4.*
+    , tasty-hedgehog >=1.3 && <1.5
+  default-language: Haskell2010
