@@ -1,21 +1,28 @@
 module ExampleUtils where
 
 import qualified Data.Text as T
-import qualified Data.Text.IO as TIO
 import Discord
 import qualified Discord.Requests as R
 import Discord.Types
 import Text.Read (readMaybe)
+import System.Environment (lookupEnv)
 
 getToken :: IO T.Text
-getToken = TIO.readFile "./secrets/auth-token.secret"
+getToken = do
+  maybeToken <- lookupEnv "AUTH_TOKEN"
+  case maybeToken of
+    Just token -> pure $ T.pack token
+    Nothing -> error "$AUTH_TOKEN not set"
 
 getGuildId :: IO GuildId
 getGuildId = do
-  gids <- readFile "./secrets/guildid.secret"
-  case readMaybe gids of
-    Just g -> pure g
-    Nothing -> error "could not read guild id from `guildid.secret`"
+  maybeGid <- lookupEnv "GUILD_ID"
+  case maybeGid of
+    Just gid ->
+      case readMaybe gid of
+        Just g -> pure g
+        Nothing -> error $ "Could not read guild id " <> gid
+    Nothing -> error "$GUILD_ID not set"
 
 -- | Given the test server and an action operating on a channel id, get the
 -- first text channel of that server and use the action on that channel.

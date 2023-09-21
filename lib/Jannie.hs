@@ -18,6 +18,7 @@ import Control.Monad.IO.Class (MonadIO)
 import qualified Discord.Requests as R
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
+import Configuration.Dotenv (loadFile, defaultConfig)
 
 botName = "jannie"
 
@@ -25,6 +26,7 @@ botName = "jannie"
 
 main :: IO ()
 main = do
+  _ <- loadFile defaultConfig
   tok <- getToken
   testGuildId <- getGuildId
 

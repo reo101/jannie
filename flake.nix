@@ -61,6 +61,7 @@
           "bytestring"
           "text"
           "unliftio"
+          "dotenv >= 0.11"
         ];
       };
 

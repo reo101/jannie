@@ -1,4 +1,3 @@
 /dist-newstyle
 /.direnv
-/secrets/*
-!/secrets/*.example
+.env
