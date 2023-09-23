@@ -1,4 +1,4 @@
-module ExampleUtils where
+module Utils where
 
 import qualified Data.Text as T
 import Discord

@@ -7,6 +7,7 @@
     };
     hix = {
       url = "github:tek/hix";
+      inputs.nixpkgs.url = "nixpkgs";
     };
     hls = {
       url = "github:haskell/haskell-language-server?ref=2.2.0.0";
@@ -26,13 +27,9 @@
     envs.main = {
       ghc.compiler = "ghc902";
 
-      buildInputs = [];
-
-      services.postgres = {
-        enable = false;
-      };
-
-      # hls.hls.package = hls.packages.${config.system}.haskell-language-server-925;
+      buildInputs = with nixpkgs.legacyPackages.${config.system}; [
+        mktemp
+      ];
     };
 
     overrides = {hackage, unbreak, ...}: {

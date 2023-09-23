@@ -17,8 +17,8 @@ build-type:     Simple
 
 library
   exposed-modules:
-      ExampleUtils
       Jannie
+      Utils
   other-modules:
       Paths_jannie
   hs-source-dirs:
@@ -51,7 +51,7 @@ test-suite jannie-test
   type: exitcode-stdio-1.0
   main-is: Main.hs
   other-modules:
-      Jannie.Test.NameTest
+      Jannie.Test.NothingTest
       Paths_jannie
   hs-source-dirs:
       test
