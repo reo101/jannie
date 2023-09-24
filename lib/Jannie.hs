@@ -1,7 +1,9 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -Wno-missing-fields #-}
 
 module Jannie (
   main,
@@ -9,6 +11,7 @@ module Jannie (
 
 import Configuration.Dotenv (defaultConfig, loadFile)
 import Control.Applicative (asum)
+import Control.Monad (guard)
 import Data.Maybe (fromJust)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -19,7 +22,6 @@ import qualified Discord.Requests as DR
 import qualified Discord.Types as DT
 import UnliftIO (liftIO)
 import Utils (getGuildId, getToken)
-import Control.Monad (guard)
 
 -- MAIN
 
@@ -126,6 +128,48 @@ rolesSlashCommand =
     , DI.createOptions = Nothing
     }
 
+pattern Command ::
+  T.Text ->
+  Maybe T.Text ->
+  Maybe DT.User ->
+  Maybe DI.OptionsData ->
+  DT.InteractionId ->
+  DT.InteractionToken ->
+  DT.GuildId ->
+  DT.ChannelId ->
+  DT.Event
+pattern Command
+  { name
+  , nick
+  , user
+  , optionsData
+  , interactionId
+  , interactionToken
+  , interactionGuildId
+  , interactionChannelId
+  } =
+  DT.InteractionCreate
+    DI.InteractionApplicationCommand
+      { DI.applicationCommandData =
+        DI.ApplicationCommandDataChatInput
+          { DI.optionsData
+          , DI.applicationCommandDataName = name
+          }
+      , DI.interactionId
+      , DI.interactionToken
+      , DI.interactionGuildId = Just interactionGuildId
+      , DI.interactionChannelId = Just interactionChannelId
+      , DI.interactionUser =
+        DI.MemberOrUser
+          ( Left
+              ( DT.GuildMember
+                  { DT.memberUser = user
+                  , DT.memberNick = nick
+                  }
+                )
+            )
+      }
+
 -- If an event handler throws an exception, discord-haskell will continue to run
 eventHandler :: DT.GuildId -> DT.Event -> D.DiscordHandler ()
 eventHandler testserverid event = case event of
@@ -144,23 +188,12 @@ eventHandler testserverid event = case event of
       Left r -> liftIO $ print r
       Right ls -> liftIO $ putStrLn $ "number of application commands total " ++ show (length ls)
   -- Try to authenticate, but already have a nickname
-  DT.InteractionCreate
-    DI.InteractionApplicationCommand
-      { DI.applicationCommandData =
-        DI.ApplicationCommandDataChatInput
-          { DI.applicationCommandDataName = "authenticate"
-          }
-      , DI.interactionId
-      , DI.interactionToken
-      , DI.interactionUser =
-        DI.MemberOrUser
-          ( Left
-              ( DT.GuildMember
-                  { DT.memberNick = Just nick
-                  }
-                )
-            )
-      } -> do
+  Command
+    { name = "authenticate"
+    , nick = Just nick
+    , interactionId
+    , interactionToken
+    } -> do
       void $
         D.restCall $
           DR.CreateInteractionResponse
@@ -184,26 +217,15 @@ eventHandler testserverid event = case event of
                 )
             )
   -- Authenticate, setting a nickname
-  DT.InteractionCreate
-    DI.InteractionApplicationCommand
-      { DI.applicationCommandData =
-        DI.ApplicationCommandDataChatInput
-          { DI.optionsData = Just (DI.OptionsDataValues optionsDataValues)
-          , DI.applicationCommandDataName = "authenticate"
-          }
-      , DI.interactionId
-      , DI.interactionToken
-      , DI.interactionUser =
-        DI.MemberOrUser
-          ( Left
-              ( DT.GuildMember
-                  { DT.memberUser = Just (DT.User {DT.userId})
-                  , DT.memberNick = Nothing
-                  }
-                )
-            )
-      , DI.interactionGuildId = Just interactionGuildId
-      } -> do
+  Command
+    { name = "authenticate"
+    , nick = Nothing
+    , user = Just (DT.User {DT.userId})
+    , optionsData = Just (DI.OptionsDataValues optionsDataValues)
+    , interactionId
+    , interactionToken
+    , interactionGuildId
+    } -> do
       let getField field =
             fromJust $
               asum $
@@ -261,22 +283,12 @@ eventHandler testserverid event = case event of
                 )
             )
   -- Select roles
-  DT.InteractionCreate
-    DI.InteractionApplicationCommand
-      { DI.applicationCommandData =
-        DI.ApplicationCommandDataChatInput
-          { DI.applicationCommandDataName = "roles"
-          }
-      , DI.interactionChannelId = Just interactionChannelId
-      , DI.interactionUser =
-        DI.MemberOrUser
-          ( Left
-              ( DT.GuildMember
-                  { DT.memberNick = Just _
-                  }
-                )
-            )
-      } -> selectRoles interactionChannelId
+  Command
+    { name = "roles"
+    , nick = Just _
+    , interactionChannelId
+    } -> selectRoles interactionChannelId
+  -- TODO: Apply roles
   DT.InteractionCreate
     DI.InteractionComponent
       { DI.componentData =
