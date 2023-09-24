@@ -3,23 +3,24 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# OPTIONS_GHC -Wno-missing-fields #-}
 
 module Jannie (
   main,
 ) where
 
 import Configuration.Dotenv (defaultConfig, loadFile)
-import Control.Applicative (asum)
 import Control.Monad (guard)
-import Data.Maybe (fromJust)
+import Data.List (stripPrefix)
+import Data.Maybe (mapMaybe)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import Debug.Trace (traceM, traceShowM)
+import Debug.Trace (traceShowM)
 import qualified Discord as D
 import qualified Discord.Interactions as DI
+import qualified Discord.Internal.Types.Prelude as DITP
 import qualified Discord.Requests as DR
 import qualified Discord.Types as DT
+import Text.Read (readMaybe)
 import UnliftIO (liftIO)
 import Utils (getGuildId, getToken)
 
@@ -128,33 +129,40 @@ rolesSlashCommand =
     , DI.createOptions = Nothing
     }
 
-pattern Command ::
+pattern DataChatInput ::
   T.Text ->
+  Maybe DI.OptionsData ->
+  DI.ApplicationCommandData
+pattern DataChatInput
+  { name
+  , optionsData
+  } <-
+  DI.ApplicationCommandDataChatInput
+    { DI.optionsData
+    , DI.applicationCommandDataName = name
+    }
+
+pattern Command ::
   Maybe T.Text ->
   Maybe DT.User ->
-  Maybe DI.OptionsData ->
+  DI.ApplicationCommandData ->
   DT.InteractionId ->
   DT.InteractionToken ->
   DT.GuildId ->
   DT.ChannelId ->
   DT.Event
 pattern Command
-  { name
-  , nick
+  { nick
   , user
-  , optionsData
+  , commandData
   , interactionId
   , interactionToken
   , interactionGuildId
   , interactionChannelId
-  } =
+  } <-
   DT.InteractionCreate
     DI.InteractionApplicationCommand
-      { DI.applicationCommandData =
-        DI.ApplicationCommandDataChatInput
-          { DI.optionsData
-          , DI.applicationCommandDataName = name
-          }
+      { DI.applicationCommandData = commandData
       , DI.interactionId
       , DI.interactionToken
       , DI.interactionGuildId = Just interactionGuildId
@@ -189,7 +197,10 @@ eventHandler testserverid event = case event of
       Right ls -> liftIO $ putStrLn $ "number of application commands total " ++ show (length ls)
   -- Try to authenticate, but already have a nickname
   Command
-    { name = "authenticate"
+    { commandData =
+      DataChatInput
+        { name = "authenticate"
+        }
     , nick = Just nick
     , interactionId
     , interactionToken
@@ -218,31 +229,35 @@ eventHandler testserverid event = case event of
             )
   -- Authenticate, setting a nickname
   Command
-    { name = "authenticate"
+    { commandData =
+      DataChatInput
+        { name = "authenticate"
+        , optionsData = Just (DI.OptionsDataValues optionsDataValues)
+        }
     , nick = Nothing
     , user = Just (DT.User {DT.userId})
-    , optionsData = Just (DI.OptionsDataValues optionsDataValues)
     , interactionId
     , interactionToken
     , interactionGuildId
     } -> do
       let getField field =
-            fromJust $
-              asum $
-                fmap
-                  ( \case
-                      DI.OptionDataValueString
-                        { DI.optionDataValueName = fieldName
-                        , DI.optionDataValueString = Right fieldValue
-                        } -> do
-                          guard $ field == fieldName
-                          pure fieldValue
-                      _ -> Nothing
-                  )
-                  optionsDataValues
+            head $
+              mapMaybe
+                ( \case
+                    DI.OptionDataValueString
+                      { DI.optionDataValueName = fieldName
+                      , DI.optionDataValueString = Right fieldValue
+                      } -> do
+                        guard $ field == fieldName
+                        pure fieldValue
+                    _ -> Nothing
+                )
+                optionsDataValues
 
       let name = getField "име"
       let fn = getField "фн"
+
+      -- TODO: validate `name` and `fn`
 
       -- Set nickname
       void $
@@ -284,24 +299,82 @@ eventHandler testserverid event = case event of
             )
   -- Select roles
   Command
-    { name = "roles"
+    { commandData =
+      DataChatInput
+        { name = "roles"
+        }
     , nick = Just _
-    , interactionChannelId
-    } -> selectRoles interactionChannelId
-  -- TODO: Apply roles
+    , interactionId
+    , interactionToken
+    } ->
+      void $
+        D.restCall $
+          DR.CreateInteractionResponse
+            interactionId
+            interactionToken
+            ( DI.InteractionResponseChannelMessage
+                ( DI.InteractionResponseMessage
+                    { DI.interactionResponseMessageTTS = Nothing
+                    , -- TODO: notify user that admin roles are not set
+                      DI.interactionResponseMessageContent =
+                        Just "Тук можете да си изберете кои групи да следите"
+                    , DI.interactionResponseMessageAttachments = Nothing
+                    , DI.interactionResponseMessageAllowedMentions = Nothing
+                    , DI.interactionResponseMessageComponents =
+                        Just
+                          [ selectRolesComponent
+                          ]
+                    , DI.interactionResponseMessageEmbeds = Nothing
+                    , DI.interactionResponseMessageFlags =
+                        Just $
+                          DI.InteractionResponseMessageFlags
+                            [ DI.InteractionResponseMessageFlagEphermeral
+                            ]
+                    }
+                )
+            )
+  -- Apply roles
+  -- TODO: make pattern
   DT.InteractionCreate
     DI.InteractionComponent
       { DI.componentData =
         DI.SelectMenuData
           { DI.componentDataCustomId = "role selection menu"
-          , DI.componentDataValues = what
+          , DI.componentDataValues = internalRoles
           }
+      , DI.interactionUser =
+        DI.MemberOrUser
+          ( Left
+              ( DT.GuildMember
+                  { DT.memberUser = Just (DT.User {DT.userId})
+                  }
+                )
+            )
+      , DI.interactionGuildId = Just interactionGuildId
       } -> do
-      -- NOTE: (currently) cannot descructure componentDataValues into [Roles]
-      traceM "Values"
-      traceShowM what
+      -- HACK: Since the real `SelectMenuDataRole` type is not exported, the only thing we can do is to use its `Show` instance to scoop out the underlying list of `RoleID`s (`Snowflake`s)
+      let roles :: Maybe [DITP.RoleId]
+          roles = do
+            let stringRep = show internalRoles
+            snowFlakeArray <- stripPrefix "SelectMenuDataRole " stringRep
+            unfilteredRoles <- readMaybe snowFlakeArray
+            -- TODO: store this in config
+            let adminRoles = []
+            pure $ filter (`notElem` adminRoles) unfilteredRoles
 
-      pure ()
+      -- TODO: filter out invalid roles (admin/bot roles)
+      traceShowM roles
+
+      -- Set roles
+      void $
+        D.restCall $
+          DR.ModifyGuildMember
+            interactionGuildId
+            userId
+            ( D.def
+                { DR.modifyGuildMemberOptsRoles = roles
+                }
+            )
   _ -> return ()
 
 selectRolesComponent :: DT.ActionRow
@@ -311,31 +384,12 @@ selectRolesComponent =
         { DT.selectMenuCustomId = "role selection menu"
         , DT.selectMenuDisabled = False
         , DT.selectMenuData = DT.SelectMenuDataRole
-        , DT.selectMenuPlaceholder = Nothing
+        , -- TODO: put current roles in placeholder
+          DT.selectMenuPlaceholder = Nothing
         , DT.selectMenuMinValues = Just 0
         , DT.selectMenuMaxValues = Just 10
         }
     )
-
-selectRoles :: DT.ChannelId -> D.DiscordHandler ()
-selectRoles channelId = do
-  void $
-    D.restCall $
-      DR.CreateMessageDetailed
-        channelId
-        ( DR.MessageDetailedOpts
-            { DR.messageDetailedTTS = False
-            , DR.messageDetailedStickerIds = Nothing
-            , DR.messageDetailedReference = Nothing
-            , DR.messageDetailedFile = Nothing
-            , DR.messageDetailedEmbeds = Nothing
-            , DR.messageDetailedContent = "Тук можеш да си избереш кои групи да следиш"
-            , DR.messageDetailedComponents = Just [selectRolesComponent]
-            , DR.messageDetailedAllowedMentions = Nothing
-            }
-        )
-  traceShowM ()
-  pure ()
 
 fromBot :: DT.Message -> Bool
 fromBot = DT.userIsBot . DT.messageAuthor
@@ -348,6 +402,7 @@ void =
   ( >>=
       ( \case
           Left e -> liftIO $ print e
-          Right v -> liftIO $ print v
+          -- Right v -> liftIO $ print v
+          Right _ -> pure ()
       )
   )
