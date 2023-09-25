@@ -2,14 +2,14 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Jannie (
   main,
 ) where
 
 import Configuration.Dotenv (defaultConfig, loadFile)
-import Control.Monad (guard)
+import Control.Monad (guard, unless)
 import Data.List (stripPrefix)
 import Data.Maybe (mapMaybe)
 import qualified Data.Text as T
@@ -22,7 +22,11 @@ import qualified Discord.Requests as DR
 import qualified Discord.Types as DT
 import Text.Read (readMaybe)
 import UnliftIO (liftIO)
-import Utils (getGuildId, getToken)
+import Utils (getGuildId, getToken, getAdminRoles)
+import Config ( Config(..) )
+import Text.Regex.TDFA ((=~))
+import Data.Foldable (traverse_)
+import Control.Monad.State.Lazy (execState, modify)
 
 -- MAIN
 
@@ -30,7 +34,10 @@ main :: IO ()
 main = do
   _ <- loadFile defaultConfig
   tok <- getToken
-  testserverid <- getGuildId
+  guildId <- getGuildId
+  adminRoles <- getAdminRoles
+
+  let config = Config.Config { guildId, adminRoles }
 
   -- open ghci and run  [[ :info RunDiscordOpts ]] to see available fields
   t <-
@@ -39,7 +46,7 @@ main = do
         { D.discordToken = tok
         , D.discordOnStart = startHandler
         , D.discordOnEnd = liftIO $ putStrLn "Ended"
-        , D.discordOnEvent = eventHandler testserverid
+        , D.discordOnEvent = eventHandler config
         , D.discordOnLog = \s -> TIO.putStrLn s >> TIO.putStrLn ""
         , D.discordGatewayIntent =
             DT.GatewayIntent
@@ -134,12 +141,12 @@ pattern DataChatInput ::
   Maybe DI.OptionsData ->
   DI.ApplicationCommandData
 pattern DataChatInput
-  { name
+  { commandName
   , optionsData
   } <-
   DI.ApplicationCommandDataChatInput
     { DI.optionsData
-    , DI.applicationCommandDataName = name
+    , DI.applicationCommandDataName = commandName
     }
 
 pattern Command ::
@@ -179,19 +186,19 @@ pattern Command
       }
 
 -- If an event handler throws an exception, discord-haskell will continue to run
-eventHandler :: DT.GuildId -> DT.Event -> D.DiscordHandler ()
-eventHandler testserverid event = case event of
+eventHandler :: Config -> DT.Event -> D.DiscordHandler ()
+eventHandler (Config { guildId, adminRoles }) event = case event of
   DT.Ready _ _ _ _ _ _ (DT.PartialApplication i _) -> do
     vs <-
       D.restCall $
         DR.BulkOverWriteGuildApplicationCommand
           i
-          testserverid
+          guildId
           [ authenticateSlashCommand
           , rolesSlashCommand
           ]
     liftIO (putStrLn $ "number of application commands added " ++ show (length vs))
-    acs <- D.restCall (DR.GetGuildApplicationCommands i testserverid)
+    acs <- D.restCall (DR.GetGuildApplicationCommands i guildId)
     case acs of
       Left r -> liftIO $ print r
       Right ls -> liftIO $ putStrLn $ "number of application commands total " ++ show (length ls)
@@ -199,7 +206,7 @@ eventHandler testserverid event = case event of
   Command
     { commandData =
       DataChatInput
-        { name = "authenticate"
+        { commandName = "authenticate"
         }
     , nick = Just nick
     , interactionId
@@ -231,7 +238,7 @@ eventHandler testserverid event = case event of
   Command
     { commandData =
       DataChatInput
-        { name = "authenticate"
+        { commandName = "authenticate"
         , optionsData = Just (DI.OptionsDataValues optionsDataValues)
         }
     , nick = Nothing
@@ -254,54 +261,79 @@ eventHandler testserverid event = case event of
                 )
                 optionsDataValues
 
+      let reply = replyEphemeral interactionId interactionToken
+      
+      let validate :: [(T.Text, String, String)] -> Maybe (D.DiscordHandler ())
+          validate instructions = do
+            let errors = 
+                  flip execState [] $
+                    traverse_
+                      (\(fieldValue, fieldPattern, message) ->
+                        unless (fieldValue =~ fieldPattern) $
+                          modify $ (:) $ message <> " Гоним нещо като " <> fieldPattern)
+                      instructions
+
+            if null errors
+              then Nothing
+              else Just $ reply (unlines errors)
+
+
       let name = getField "име"
       let fn = getField "фн"
+      
+      let errors = 
+            validate
+              [ (,,) name "^[А-Я][а-я]+ [А-Я][а-я]+$"     "Не Ви е валидно името, колега!"
+              , (,,) fn   "^([0-9]{5}|[0-9]MI[0-9]{7})$"  "Не Ви е валиден факултетният номер, колега!"
+              ]
 
-      -- TODO: validate `name` and `fn`
-
-      -- Set nickname
-      void $
-        D.restCall $
-          DR.ModifyGuildMember
-            interactionGuildId
-            userId
-            ( D.def
-                { DR.modifyGuildMemberOptsNickname =
-                    Just $ name <> " - " <> fn
-                }
-            )
-
-      -- (Privately) Report success and prompt the selection of roles
-      void $
-        D.restCall $
-          DR.CreateInteractionResponse
-            interactionId
-            interactionToken
-            ( DI.InteractionResponseChannelMessage
-                ( DI.InteractionResponseMessage
-                    { DI.interactionResponseMessageTTS = Nothing
-                    , DI.interactionResponseMessageContent =
-                        Just "Успешно Ви бе генериран прякор. Добра работа, колега. Сега можете да си изберете кои групи искате да следите (в идното съобщение или с извикване на `/roles`)."
-                    , DI.interactionResponseMessageAttachments = Nothing
-                    , DI.interactionResponseMessageAllowedMentions = Nothing
-                    , DI.interactionResponseMessageComponents =
-                        Just
-                          [ selectRolesComponent
-                          ]
-                    , DI.interactionResponseMessageEmbeds = Nothing
-                    , DI.interactionResponseMessageFlags =
-                        Just $
-                          DI.InteractionResponseMessageFlags
-                            [ DI.InteractionResponseMessageFlagEphermeral
-                            ]
+      case errors of 
+        Just callback -> callback
+        Nothing -> do
+          -- Set nickname
+          void $
+            D.restCall $
+              DR.ModifyGuildMember
+                interactionGuildId
+                userId
+                ( D.def
+                    { DR.modifyGuildMemberOptsNickname =
+                        Just $ name <> " - " <> fn
                     }
                 )
-            )
+
+          -- (Privately) Report success and prompt the selection of roles
+          void $
+            D.restCall $
+              DR.CreateInteractionResponse
+                interactionId
+                interactionToken
+                ( DI.InteractionResponseChannelMessage
+                    ( DI.InteractionResponseMessage
+                        { DI.interactionResponseMessageTTS = Nothing
+                        , DI.interactionResponseMessageContent =
+                            Just "Успешно Ви бе генериран прякор. Добра работа, колега. Сега можете да си изберете кои групи искате да следите (от полето долу или с извикване на `/roles`)."
+                        , DI.interactionResponseMessageAttachments = Nothing
+                        , DI.interactionResponseMessageAllowedMentions = Nothing
+                        , DI.interactionResponseMessageComponents =
+                            Just
+                              [ selectRolesComponent
+                              ]
+                        , DI.interactionResponseMessageEmbeds = Nothing
+                        , DI.interactionResponseMessageFlags =
+                            Just $
+                              DI.InteractionResponseMessageFlags
+                                [ DI.InteractionResponseMessageFlagEphermeral
+                                ]
+                        }
+                    )
+                )
+      
   -- Select roles
   Command
     { commandData =
       DataChatInput
-        { name = "roles"
+        { commandName = "roles"
         }
     , nick = Just _
     , interactionId
@@ -351,6 +383,8 @@ eventHandler testserverid event = case event of
                 )
             )
       , DI.interactionGuildId = Just interactionGuildId
+      , DI.interactionId
+      , DI.interactionToken
       } -> do
       -- HACK: Since the real `SelectMenuDataRole` type is not exported, the only thing we can do is to use its `Show` instance to scoop out the underlying list of `RoleID`s (`Snowflake`s)
       let roles :: Maybe [DITP.RoleId]
@@ -358,12 +392,10 @@ eventHandler testserverid event = case event of
             let stringRep = show internalRoles
             snowFlakeArray <- stripPrefix "SelectMenuDataRole " stringRep
             unfilteredRoles <- readMaybe snowFlakeArray
-            -- TODO: store this in config
-            let adminRoles = []
+            -- TODO: if they try to set any adminRoles, log them in channel #hall-of-haxxors :D
             pure $ filter (`notElem` adminRoles) unfilteredRoles
 
-      -- TODO: filter out invalid roles (admin/bot roles)
-      traceShowM roles
+      -- traceShowM roles
 
       -- Set roles
       void $
@@ -375,7 +407,59 @@ eventHandler testserverid event = case event of
                 { DR.modifyGuildMemberOptsRoles = roles
                 }
             )
+
+      -- Notify user about successful setting of roles
+      void $
+        D.restCall $
+          DR.CreateInteractionResponse
+            interactionId
+            interactionToken
+            ( DI.InteractionResponseChannelMessage
+                ( DI.InteractionResponseMessage
+                    { DI.interactionResponseMessageTTS = Nothing
+                    , -- TODO: notify user that admin roles are not set
+                      DI.interactionResponseMessageContent =
+                        Just "Чудесно! Успешно променихте ролите си!"
+                    , DI.interactionResponseMessageAttachments = Nothing
+                    , DI.interactionResponseMessageAllowedMentions = Nothing
+                    , DI.interactionResponseMessageComponents = Nothing
+                    , DI.interactionResponseMessageEmbeds = Nothing
+                    , DI.interactionResponseMessageFlags =
+                        Just $
+                          DI.InteractionResponseMessageFlags
+                            [ DI.InteractionResponseMessageFlagEphermeral
+                            ]
+                    }
+                )
+            )
   _ -> return ()
+
+  where
+    replyEphemeral :: DT.InteractionId -> DT.InteractionToken -> String -> D.DiscordHandler ()
+    replyEphemeral interactionId interactionToken message = 
+      void $
+        D.restCall $
+          DR.CreateInteractionResponse
+            interactionId
+            interactionToken
+            ( DI.InteractionResponseChannelMessage
+                ( DI.InteractionResponseMessage
+                    { DI.interactionResponseMessageTTS = Nothing
+                    , DI.interactionResponseMessageContent =
+                        Just $ T.pack message
+                    , DI.interactionResponseMessageAttachments = Nothing
+                    , DI.interactionResponseMessageAllowedMentions = Nothing
+                    , DI.interactionResponseMessageComponents = Nothing
+                    , DI.interactionResponseMessageEmbeds = Nothing
+                    , DI.interactionResponseMessageFlags =
+                        Just $
+                          DI.InteractionResponseMessageFlags
+                            [ DI.InteractionResponseMessageFlagEphermeral
+                            ]
+                    }
+                )
+            )
+
 
 selectRolesComponent :: DT.ActionRow
 selectRolesComponent =
@@ -384,8 +468,7 @@ selectRolesComponent =
         { DT.selectMenuCustomId = "role selection menu"
         , DT.selectMenuDisabled = False
         , DT.selectMenuData = DT.SelectMenuDataRole
-        , -- TODO: put current roles in placeholder
-          DT.selectMenuPlaceholder = Nothing
+        , DT.selectMenuPlaceholder = Nothing
         , DT.selectMenuMinValues = Just 0
         , DT.selectMenuMaxValues = Just 10
         }

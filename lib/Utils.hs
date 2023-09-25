@@ -1,11 +1,20 @@
 module Utils where
 
 import qualified Data.Text as T
-import Discord
+import qualified Discord as D
 import qualified Discord.Requests as R
-import Discord.Types
+import qualified Discord.Types as DT
 import Text.Read (readMaybe)
 import System.Environment (lookupEnv)
+
+getAdminRoles :: IO [DT.RoleId]
+getAdminRoles = do
+  maybeRawAdminRoles <- lookupEnv "ADMIN_ROLES"
+  case maybeRawAdminRoles of
+    Nothing -> error "$ADMIN_ROLES not set"
+    Just rawAdminRoles -> case readMaybe rawAdminRoles of
+      Nothing -> error "$ADMIN_ROLES wrong format"
+      Just adminRoles -> pure adminRoles
 
 getToken :: IO T.Text
 getToken = do
@@ -14,7 +23,7 @@ getToken = do
     Just token -> pure $ T.pack token
     Nothing -> error "$AUTH_TOKEN not set"
 
-getGuildId :: IO GuildId
+getGuildId :: IO DT.GuildId
 getGuildId = do
   maybeGid <- lookupEnv "GUILD_ID"
   case maybeGid of
@@ -26,11 +35,11 @@ getGuildId = do
 
 -- | Given the test server and an action operating on a channel id, get the
 -- first text channel of that server and use the action on that channel.
-actionWithChannelId :: GuildId -> (ChannelId -> DiscordHandler a) -> DiscordHandler a
+actionWithChannelId :: DT.GuildId -> (DT.ChannelId -> D.DiscordHandler a) -> D.DiscordHandler a
 actionWithChannelId testserverid f = do
-  Right chans <- restCall $ R.GetGuildChannels testserverid
-  (f . channelId) (head (filter isTextChannel chans))
+  Right chans <- D.restCall $ R.GetGuildChannels testserverid
+  (f . DT.channelId) (head (filter isTextChannel chans))
   where
-    isTextChannel :: Channel -> Bool
-    isTextChannel ChannelText {} = True
+    isTextChannel :: DT.Channel -> Bool
+    isTextChannel DT.ChannelText {} = True
     isTextChannel _ = False
