@@ -8,8 +8,11 @@ module Jannie (
   main,
 ) where
 
+import Config (Config (..))
 import Configuration.Dotenv (defaultConfig, loadFile)
 import Control.Monad (guard, unless)
+import Control.Monad.State.Lazy (execState, modify)
+import Data.Foldable (traverse_)
 import Data.List (stripPrefix)
 import Data.Maybe (mapMaybe)
 import qualified Data.Text as T
@@ -21,12 +24,9 @@ import qualified Discord.Internal.Types.Prelude as DITP
 import qualified Discord.Requests as DR
 import qualified Discord.Types as DT
 import Text.Read (readMaybe)
-import UnliftIO (liftIO)
-import Utils (getGuildId, getToken, getAdminRoles)
-import Config ( Config(..) )
 import Text.Regex.TDFA ((=~))
-import Data.Foldable (traverse_)
-import Control.Monad.State.Lazy (execState, modify)
+import UnliftIO (liftIO)
+import Utils (getAdminRoles, getGuildId, getToken)
 
 -- MAIN
 
@@ -37,7 +37,7 @@ main = do
   guildId <- getGuildId
   adminRoles <- getAdminRoles
 
-  let config = Config.Config { guildId, adminRoles }
+  let config = Config.Config {guildId, adminRoles}
 
   -- open ghci and run  [[ :info RunDiscordOpts ]] to see available fields
   t <-
@@ -187,7 +187,7 @@ pattern Command
 
 -- If an event handler throws an exception, discord-haskell will continue to run
 eventHandler :: Config -> DT.Event -> D.DiscordHandler ()
-eventHandler (Config { guildId, adminRoles }) event = case event of
+eventHandler (Config {guildId, adminRoles}) event = case event of
   DT.Ready _ _ _ _ _ _ (DT.PartialApplication i _) -> do
     vs <-
       D.restCall $
@@ -262,32 +262,36 @@ eventHandler (Config { guildId, adminRoles }) event = case event of
                 optionsDataValues
 
       let reply = replyEphemeral interactionId interactionToken
-      
+
       let validate :: [(T.Text, String, String)] -> Maybe (D.DiscordHandler ())
           validate instructions = do
-            let errors = 
+            let errors =
                   flip execState [] $
                     traverse_
-                      (\(fieldValue, fieldPattern, message) ->
-                        unless (fieldValue =~ fieldPattern) $
-                          modify $ (:) $ message <> " Гоним нещо като " <> fieldPattern)
+                      ( \(fieldValue, fieldPattern, message) ->
+                          unless (fieldValue =~ fieldPattern) $
+                            modify $
+                              (:) $
+                                message <> " Гоним нещо като " <> fieldPattern
+                      )
                       instructions
 
             if null errors
               then Nothing
               else Just $ reply (unlines errors)
 
-
       let name = getField "име"
       let fn = getField "фн"
-      
-      let errors = 
-            validate
-              [ (,,) name "^[А-Я][а-я]+ [А-Я][а-я]+$"     "Не Ви е валидно името, колега!"
-              , (,,) fn   "^([0-9]{5}|[0-9]MI[0-9]{7})$"  "Не Ви е валиден факултетният номер, колега!"
-              ]
 
-      case errors of 
+      {- FOURMOLU_DISABLE -}
+      let errors =
+            validate
+              [ (,,) name "^[А-Я][а-я]+ [А-Я][а-я]+$"    "Не Ви е валидно името, колега!"
+              , (,,) fn   "^([0-9]{5}|[0-9]MI[0-9]{7})$" "Не Ви е валиден факултетният номер, колега!"
+              ]
+      {- FOURMOLU_ENABLE -}
+
+      case errors of
         Just callback -> callback
         Nothing -> do
           -- Set nickname
@@ -328,7 +332,7 @@ eventHandler (Config { guildId, adminRoles }) event = case event of
                         }
                     )
                 )
-      
+
   -- Select roles
   Command
     { commandData =
@@ -433,10 +437,9 @@ eventHandler (Config { guildId, adminRoles }) event = case event of
                 )
             )
   _ -> return ()
-
   where
     replyEphemeral :: DT.InteractionId -> DT.InteractionToken -> String -> D.DiscordHandler ()
-    replyEphemeral interactionId interactionToken message = 
+    replyEphemeral interactionId interactionToken message =
       void $
         D.restCall $
           DR.CreateInteractionResponse
@@ -459,7 +462,6 @@ eventHandler (Config { guildId, adminRoles }) event = case event of
                     }
                 )
             )
-
 
 selectRolesComponent :: DT.ActionRow
 selectRolesComponent =
