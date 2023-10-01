@@ -13,19 +13,17 @@ import Configuration.Dotenv (defaultConfig, loadFile)
 import Control.Monad (guard, unless)
 import Control.Monad.State.Lazy (execState, modify)
 import Data.Foldable (traverse_)
-import Data.List (stripPrefix)
+import Data.List (intercalate)
 import Data.Maybe (mapMaybe)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import Debug.Trace (traceShowM)
 import qualified Discord as D
 import qualified Discord.Interactions as DI
-import qualified Discord.Internal.Types.Prelude as DITP
 import qualified Discord.Requests as DR
 import qualified Discord.Types as DT
-import Text.Read (readMaybe)
 import Text.Regex.TDFA ((=~))
 import UnliftIO (liftIO)
+import Text.Printf (printf)
 
 -- MAIN
 
@@ -120,18 +118,6 @@ authenticateSlashCommand =
             ]
     }
 
--- rolesSlashCommand :: DI.CreateApplicationCommand
--- rolesSlashCommand =
---   DI.CreateApplicationCommandChatInput
---     { DI.createName = "roles"
---     , DI.createLocalizedName = Nothing
---     , DI.createDescription = "Roles Selector"
---     , DI.createLocalizedDescription = Nothing
---     , DI.createDefaultMemberPermissions = Nothing
---     , DI.createDMPermission = Nothing
---     , DI.createOptions = Nothing
---     }
-
 pattern DataChatInput ::
   T.Text ->
   Maybe DI.OptionsData ->
@@ -183,7 +169,7 @@ pattern Command
 
 -- If an event handler throws an exception, discord-haskell will continue to run
 eventHandler :: Config -> DT.Event -> D.DiscordHandler ()
-eventHandler (Config {guildId, {- adminRoles, -} defaultRoles}) event = case event of
+eventHandler (Config {guildId, defaultRoles}) event = case event of
   DT.Ready _ _ _ _ _ _ (DT.PartialApplication i _) -> do
     vs <-
       D.restCall $
@@ -191,7 +177,6 @@ eventHandler (Config {guildId, {- adminRoles, -} defaultRoles}) event = case eve
           i
           guildId
           [ authenticateSlashCommand
-          -- , rolesSlashCommand
           ]
     liftIO (putStrLn $ "number of application commands added " ++ show (length vs))
     acs <- D.restCall (DR.GetGuildApplicationCommands i guildId)
@@ -314,140 +299,14 @@ eventHandler (Config {guildId, {- adminRoles, -} defaultRoles}) event = case eve
                 )
 
           -- (Privately) Report success and prompt the manual selection of channels to follow
-          void $
-            D.restCall $
-              DR.CreateInteractionResponse
-                interactionId
-                interactionToken
-                ( DI.InteractionResponseChannelMessage
-                    ( DI.InteractionResponseMessage
-                        { DI.interactionResponseMessageTTS = Nothing
-                        , DI.interactionResponseMessageContent =
-                            Just $ T.pack $ unlines
-                              [ "Успешно Ви бе генериран прякор. Добра работа, колега <@!" <> show userId <> ">!"
-                              , "Вече имате верифицирана роли <@&" <> show (head defaultRoles) <> ">."
-                              , "Сега можете да навигирате до <id:customize> и да си изберете кои групи да следите."
-                              ]
-                        , DI.interactionResponseMessageAttachments = Nothing
-                        , DI.interactionResponseMessageAllowedMentions = Nothing
-                        , DI.interactionResponseMessageComponents = Nothing
-                            -- Just
-                            --   [ selectRolesComponent
-                            --   ]
-                        , DI.interactionResponseMessageEmbeds = Nothing
-                        , DI.interactionResponseMessageFlags =
-                            Just $
-                              DI.InteractionResponseMessageFlags
-                                [ DI.InteractionResponseMessageFlagEphermeral
-                                ]
-                        }
-                    )
-                )
-
-  -- -- Select roles
-  -- Command
-  --   { commandData =
-  --     DataChatInput
-  --       { commandName = "roles"
-  --       }
-  --   , nick = Just _
-  --   , interactionId
-  --   , interactionToken
-  --   } ->
-  --     void $
-  --       D.restCall $
-  --         DR.CreateInteractionResponse
-  --           interactionId
-  --           interactionToken
-  --           ( DI.InteractionResponseChannelMessage
-  --               ( DI.InteractionResponseMessage
-  --                   { DI.interactionResponseMessageTTS = Nothing
-  --                   , -- TODO: notify user that admin roles are not set
-  --                     DI.interactionResponseMessageContent =
-  --                       Just "Тук можете да си изберете кои групи да следите"
-  --                   , DI.interactionResponseMessageAttachments = Nothing
-  --                   , DI.interactionResponseMessageAllowedMentions = Nothing
-  --                   , DI.interactionResponseMessageComponents =
-  --                       Just
-  --                         [ selectRolesComponent
-  --                         ]
-  --                   , DI.interactionResponseMessageEmbeds = Nothing
-  --                   , DI.interactionResponseMessageFlags =
-  --                       Just $
-  --                         DI.InteractionResponseMessageFlags
-  --                           [ DI.InteractionResponseMessageFlagEphermeral
-  --                           ]
-  --                   }
-  --               )
-  --           )
-  -- -- Apply roles
-  -- -- TODO: make pattern
-  -- DT.InteractionCreate
-  --   DI.InteractionComponent
-  --     { DI.componentData =
-  --       DI.SelectMenuData
-  --         { DI.componentDataCustomId = "role selection menu"
-  --         , DI.componentDataValues = internalRoles
-  --         }
-  --     , DI.interactionUser =
-  --       DI.MemberOrUser
-  --         ( Left
-  --             ( DT.GuildMember
-  --                 { DT.memberUser = Just (DT.User {DT.userId})
-  --                 }
-  --               )
-  --           )
-  --     , DI.interactionGuildId = Just interactionGuildId
-  --     , DI.interactionId
-  --     , DI.interactionToken
-  --     } -> do
-  --     -- HACK: Since the real `SelectMenuDataRole` type is not exported, the only thing we can do is to use its `Show` instance to scoop out the underlying list of `RoleID`s (`Snowflake`s)
-  --     let roles :: Maybe [DITP.RoleId]
-  --         roles = do
-  --           let stringRep = show internalRoles
-  --           snowFlakeArray <- stripPrefix "SelectMenuDataRole " stringRep
-  --           unfilteredRoles <- readMaybe snowFlakeArray
-  --           -- TODO: if they try to set any adminRoles, log them in channel #hall-of-haxxors :D
-  --           pure $ filter (`notElem` adminRoles) unfilteredRoles
-
-  --     -- traceShowM roles
-
-  --     -- Set roles
-  --     void $
-  --       D.restCall $
-  --         DR.ModifyGuildMember
-  --           interactionGuildId
-  --           userId
-  --           ( D.def
-  --               { DR.modifyGuildMemberOptsRoles = roles
-  --               }
-  --           )
-
-  --     -- Notify user about successful setting of roles
-  --     void $
-  --       D.restCall $
-  --         DR.CreateInteractionResponse
-  --           interactionId
-  --           interactionToken
-  --           ( DI.InteractionResponseChannelMessage
-  --               ( DI.InteractionResponseMessage
-  --                   { DI.interactionResponseMessageTTS = Nothing
-  --                   , -- TODO: notify user that admin roles are not set
-  --                     DI.interactionResponseMessageContent =
-  --                       Just "Чудесно! Успешно променихте ролите си!"
-  --                   , DI.interactionResponseMessageAttachments = Nothing
-  --                   , DI.interactionResponseMessageAllowedMentions = Nothing
-  --                   , DI.interactionResponseMessageComponents = Nothing
-  --                   , DI.interactionResponseMessageEmbeds = Nothing
-  --                   , DI.interactionResponseMessageFlags =
-  --                       Just $
-  --                         DI.InteractionResponseMessageFlags
-  --                           [ DI.InteractionResponseMessageFlagEphermeral
-  --                           ]
-  --                   }
-  --               )
-  --           )
-
+          replyEphemeral interactionId interactionToken $
+            unlines
+              [ "Успешно Ви бе генериран прякор. Добра работа, колега <@!" <> show userId <> ">!"
+              , let roleMentions :: [String]
+                    roleMentions = map (printf "<@&%s>" . show) defaultRoles
+                 in "Вече имате верифицирана роли " <> intercalate ", " roleMentions <> "."
+              , "Сега можете да навигирате до <id:customize> и да си изберете кои групи да следите."
+              ]
   _ -> return ()
   where
     replyEphemeral :: DT.InteractionId -> DT.InteractionToken -> String -> D.DiscordHandler ()
@@ -474,25 +333,6 @@ eventHandler (Config {guildId, {- adminRoles, -} defaultRoles}) event = case eve
                     }
                 )
             )
-
-selectRolesComponent :: DT.ActionRow
-selectRolesComponent =
-  DT.ActionRowSelectMenu
-    ( DT.SelectMenu
-        { DT.selectMenuCustomId = "role selection menu"
-        , DT.selectMenuDisabled = False
-        , DT.selectMenuData = DT.SelectMenuDataRole
-        , DT.selectMenuPlaceholder = Nothing
-        , DT.selectMenuMinValues = Just 0
-        , DT.selectMenuMaxValues = Just 10
-        }
-    )
-
-fromBot :: DT.Message -> Bool
-fromBot = DT.userIsBot . DT.messageAuthor
-
-isPing :: DT.Message -> Bool
-isPing = ("ping" `T.isPrefixOf`) . T.toLower . DT.messageContent
 
 void :: (Show b) => D.DiscordHandler (Either D.RestCallErrorCode b) -> D.DiscordHandler ()
 void =
