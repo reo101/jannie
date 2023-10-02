@@ -304,7 +304,7 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
               [ "Успешно Ви бе генериран прякор. Добра работа, колега <@!" <> show userId <> ">!"
               , let roleMentions :: [String]
                     roleMentions = map (printf "<@&%s>" . show) defaultRoles
-                 in "Вече имате верифицирана роли " <> intercalate ", " roleMentions <> "."
+                 in "Вече имате верифицирани роли " <> intercalate ", " roleMentions <> "."
               , "Сега можете да навигирате до <id:customize> и да си изберете кои групи да следите."
               ]
   _ -> return ()
