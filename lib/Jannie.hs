@@ -118,6 +118,33 @@ authenticateSlashCommand =
             ]
     }
 
+
+-- | Authentication command
+githubSlashCommand :: DI.CreateApplicationCommand
+githubSlashCommand =
+  DI.CreateApplicationCommandChatInput
+    { DI.createName = "github"
+    , DI.createLocalizedName = Nothing
+    , DI.createDescription = "GitHub Username Helper"
+    , DI.createLocalizedDescription = Nothing
+    , DI.createDefaultMemberPermissions = Just "0"
+    , DI.createDMPermission = Nothing
+    , DI.createOptions =
+        Just $
+          DI.OptionsValues
+            [ DI.OptionValueString
+                { DI.optionValueName = "github"
+                , DI.optionValueLocalizedName = Nothing
+                , DI.optionValueDescription = "Username в GitHub (https://github.com/{USERNAME})"
+                , DI.optionValueLocalizedDescription = Nothing
+                , DI.optionValueRequired = True
+                , DI.optionValueStringChoices = Left False
+                , DI.optionValueStringMinLen = Just 1
+                , DI.optionValueStringMaxLen = Just 40
+                }
+            ]
+    }
+
 pattern DataChatInput ::
   T.Text ->
   Maybe DI.OptionsData ->
@@ -177,6 +204,7 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
           i
           guildId
           [ authenticateSlashCommand
+          , githubSlashCommand
           ]
     liftIO (putStrLn $ "number of application commands added " ++ show (length vs))
     acs <- D.restCall (DR.GetGuildApplicationCommands i guildId)
@@ -304,11 +332,103 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
               [ "Успешно Ви бе генериран прякор. Добра работа, колега <@!" <> show userId <> ">!"
               , let roleMentions :: [String]
                     roleMentions = map (printf "<@&%s>" . show) defaultRoles
-                 in "Вече имате верифицирани роли " <> intercalate ", " roleMentions <> "."
+                 in "Автоматично получавате ролите: " <> intercalate ", " roleMentions <> "."
               , "Сега можете да навигирате до <id:customize> и да си изберете кои групи да следите."
               ]
+  -- Set a github username
+  Command
+    { commandData =
+      DataChatInput
+        { commandName = "github"
+        , optionsData = Just (DI.OptionsDataValues optionsDataValues)
+        }
+    , nick = Just nick -- only previously authenticated users will see use this command (for now manually set up for role Студент with overridden permissions in the server)
+    , user = Just (DT.User {DT.userId})
+    , interactionId
+    , interactionToken
+    , interactionGuildId
+    } -> do
+      let getField field =
+            head $
+              mapMaybe
+                ( \case
+                    DI.OptionDataValueString
+                      { DI.optionDataValueName = fieldName
+                      , DI.optionDataValueString = Right fieldValue
+                      } -> do
+                        guard $ field == fieldName
+                        pure fieldValue
+                    _ -> Nothing
+                )
+                optionsDataValues
+
+      let reply = replyEphemeral interactionId interactionToken
+
+      let validate :: [(T.Text, String, String)] -> Maybe (D.DiscordHandler ())
+          validate instructions = do
+            let errors =
+                  flip execState [] $
+                    traverse_
+                      ( \(fieldValue, fieldPattern, message) ->
+                          unless (fieldValue =~ fieldPattern) $
+                            modify $
+                              (:) $
+                                message <> " Гоним нещо като " <> fieldPattern
+                      )
+                      instructions
+
+            if null errors
+              then Nothing
+              else Just $ reply (unlines errors)
+
+      -- let name = getField "име"
+      -- let fn = getField "фн"
+      let github = getField "github"
+
+      {- FOURMOLU_DISABLE -}
+      let errors =
+            validate
+              [ (,,) github "^[a-zA-Z0-9]([-a-zA-Z0-9]{0,38}[a-zA-Z0-9])?$" "Не Ви е валиден GitHub username-а, колега!"
+              ]
+      {- FOURMOLU_ENABLE -}
+
+      case errors of
+        Just callback -> callback
+        Nothing -> 
+          -- case parseNick nick of
+          --   (Nothing, _) -> reply "Добре е предварително да сте си дали име и фн."
+          --   (Just (name, fn), _) -> do
+
+              -- -- Set nickname
+              -- void $
+              --   D.restCall $
+              --     DR.ModifyGuildMember
+              --       interactionGuildId
+              --       userId
+              --       ( D.def
+              --           { DR.modifyGuildMemberOptsNickname =
+              --               Just $ name <> " - " <> fn <> (if "" == github then "" else " - " <> github)
+              --           }
+              --       )
+
+              -- (Privately) Report success and prompt the manual selection of channels to follow
+              replyEphemeral interactionId interactionToken $
+                unlines
+                  [ "Успешно ни пошепнахте своето име в GitHub: " <> T.unpack github <> ". Добра работа, колега <@!" <> show userId <> ">!"
+                  ]
+  
+  
   _ -> return ()
   where
+    -- parseNick :: T.Text -> (Maybe (T.Text, T.Text), Maybe T.Text)
+    -- parseNick nick = 
+    --   case T.splitOn " - " nick of
+    --     [username, userId] -> 
+    --         (Just (username, userId), Nothing)
+    --     [username, userId, githubUsername] -> 
+    --         (Just (username, userId), Just githubUsername)
+    --     _ -> 
+    --         (Nothing, Nothing)
     replyEphemeral :: DT.InteractionId -> DT.InteractionToken -> String -> D.DiscordHandler ()
     replyEphemeral interactionId interactionToken message =
       void $
