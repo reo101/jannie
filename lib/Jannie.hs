@@ -381,8 +381,6 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
               then Nothing
               else Just $ reply (unlines errors)
 
-      -- let name = getField "име"
-      -- let fn = getField "фн"
       let github = getField "github"
 
       {- FOURMOLU_DISABLE -}
@@ -394,41 +392,15 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
 
       case errors of
         Just callback -> callback
-        Nothing -> 
-          -- case parseNick nick of
-          --   (Nothing, _) -> reply "Добре е предварително да сте си дали име и фн."
-          --   (Just (name, fn), _) -> do
-
-              -- -- Set nickname
-              -- void $
-              --   D.restCall $
-              --     DR.ModifyGuildMember
-              --       interactionGuildId
-              --       userId
-              --       ( D.def
-              --           { DR.modifyGuildMemberOptsNickname =
-              --               Just $ name <> " - " <> fn <> (if "" == github then "" else " - " <> github)
-              --           }
-              --       )
-
-              -- (Privately) Report success and prompt the manual selection of channels to follow
+        Nothing ->
               replyEphemeral interactionId interactionToken $
                 unlines
                   [ "Успешно ни пошепнахте своето име в GitHub: " <> T.unpack github <> ". Добра работа, колега <@!" <> show userId <> ">!"
                   ]
-  
-  
+
+
   _ -> return ()
   where
-    -- parseNick :: T.Text -> (Maybe (T.Text, T.Text), Maybe T.Text)
-    -- parseNick nick = 
-    --   case T.splitOn " - " nick of
-    --     [username, userId] -> 
-    --         (Just (username, userId), Nothing)
-    --     [username, userId, githubUsername] -> 
-    --         (Just (username, userId), Just githubUsername)
-    --     _ -> 
-    --         (Nothing, Nothing)
     replyEphemeral :: DT.InteractionId -> DT.InteractionToken -> String -> D.DiscordHandler ()
     replyEphemeral interactionId interactionToken message =
       void $
