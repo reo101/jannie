@@ -69,6 +69,7 @@
     packages.jannie = {
       src = ./.;
       cabal.meta.synopsis = "A discord bot";
+      override = {nodoc, ...}: nodoc;
 
       library = {
         enable = true;
