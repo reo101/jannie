@@ -20,8 +20,9 @@
     inherit (nixpkgs) lib;
   in
   hix ({config, ...}: {
-    envs.main = {
-      ghc.compiler = "ghc902";
+    envs.dev = {
+      ghc.compiler = "ghc946";
+      hls.enable = true;
 
       buildInputs = with nixpkgs.legacyPackages.${config.system}; [
         mktemp
