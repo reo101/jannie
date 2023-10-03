@@ -19,12 +19,15 @@
   let
     inherit (nixpkgs) lib;
   in
-  hix ({config, ...}: {
+  hix ({config, ...}:
+  let pkgs = nixpkgs.legacyPackages.${config.system};
+  in
+  {
     envs.dev = {
       ghc.compiler = "ghc946";
       hls.enable = true;
 
-      buildInputs = with nixpkgs.legacyPackages.${config.system}; [
+      buildInputs = with pkgs; [
         mktemp
       ];
     };
