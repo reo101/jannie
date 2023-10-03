@@ -218,7 +218,7 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
     , interactionId
     , interactionToken
     } -> do
-      void $
+      printError_ $
         D.restCall $
           DR.CreateInteractionResponse
             interactionId
@@ -305,7 +305,7 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
         Just callback -> callback
         Nothing -> do
           -- Set nickname
-          void $
+          printError_ $
             D.restCall $
               DR.ModifyGuildMember
                 interactionGuildId
@@ -317,7 +317,7 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
                 )
 
           -- Set default roles for user after authentication
-          void $
+          printError_ $
             D.restCall $
               DR.ModifyGuildMember
                 interactionGuildId
@@ -399,7 +399,7 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
   where
     replyEphemeral :: DT.InteractionId -> DT.InteractionToken -> String -> D.DiscordHandler ()
     replyEphemeral interactionId interactionToken message =
-      void $
+      printError_ $
         D.restCall $
           DR.CreateInteractionResponse
             interactionId
@@ -422,8 +422,8 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
                 )
             )
 
-void :: D.DiscordHandler (Either D.RestCallErrorCode b) -> D.DiscordHandler ()
-void =
+printError_ :: D.DiscordHandler (Either D.RestCallErrorCode b) -> D.DiscordHandler ()
+printError_ =
   ( >>=
       ( \case
           Left e -> liftIO $ print e
