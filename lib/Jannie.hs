@@ -2,7 +2,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Jannie (
   main,
@@ -164,7 +163,6 @@ pattern Command ::
   DT.InteractionId ->
   DT.InteractionToken ->
   DT.GuildId ->
-  DT.ChannelId ->
   DT.Event
 pattern Command
   { nick
@@ -173,7 +171,6 @@ pattern Command
   , interactionId
   , interactionToken
   , interactionGuildId
-  , interactionChannelId
   } <-
   DT.InteractionCreate
     DI.InteractionApplicationCommand
@@ -181,7 +178,6 @@ pattern Command
       , DI.interactionId
       , DI.interactionToken
       , DI.interactionGuildId = Just interactionGuildId
-      , DI.interactionChannelId = Just interactionChannelId
       , DI.interactionUser =
         DI.MemberOrUser
           ( Left
@@ -345,11 +341,10 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
         { commandName = "github"
         , optionsData = Just (DI.OptionsDataValues optionsDataValues)
         }
-    , nick = Just nick -- only previously authenticated users will see use this command (for now manually set up for role Студент with overridden permissions in the server)
+    , nick = Just _nick -- only previously authenticated users will see use this command (for now manually set up for role Студент with overridden permissions in the server)
     , user = Just (DT.User {DT.userId})
     , interactionId
     , interactionToken
-    , interactionGuildId
     } -> do
       let getField field =
             head $
@@ -425,7 +420,7 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
                 )
             )
 
-void :: (Show b) => D.DiscordHandler (Either D.RestCallErrorCode b) -> D.DiscordHandler ()
+void :: D.DiscordHandler (Either D.RestCallErrorCode b) -> D.DiscordHandler ()
 void =
   ( >>=
       ( \case

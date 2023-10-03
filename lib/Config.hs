@@ -1,6 +1,9 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Config where
+module Config (
+  Config (..),
+  getConfig,
+) where
 
 import Data.Text qualified as T
 import Discord.Types qualified as DT
@@ -14,7 +17,7 @@ data Config = Config
   , defaultRoles :: [DT.RoleId]
   }
 
-parseEnv :: (Read a) => (String -> Maybe a) -> String -> IO a
+parseEnv :: (String -> Maybe a) -> String -> IO a
 parseEnv parser key = do
   maybeRawValue <- lookupEnv key
   case maybeRawValue of

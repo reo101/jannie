@@ -42,7 +42,17 @@
       license = "MIT";
       license-file = "LICENSE";
       author = "reo101";
-      ghc-options = ["-Wall"];
+      ghc-options = [
+        "-Wall"
+        "-Wunused-type-patterns"
+        "-Wunused-packages"
+        "-Wmissing-deriving-strategies"
+        "-Wpartial-fields"
+        "-Wredundant-constraints"
+        "-Widentities"
+        "-Wmissing-export-lists"
+        "-Wno-name-shadowing"
+      ];
     };
 
     packages.jannie = {
@@ -52,10 +62,7 @@
       library = {
         enable = true;
         dependencies = [
-          "containers"
-          "emojis == 0.1.3"
           "discord-haskell == 1.15.6"
-          "bytestring"
           "text"
           "unliftio"
           "dotenv >= 0.11"
