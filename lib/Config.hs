@@ -2,8 +2,8 @@
 
 module Config where
 
-import qualified Data.Text as T
-import qualified Discord.Types as DT
+import Data.Text qualified as T
+import Discord.Types qualified as DT
 import System.Environment (lookupEnv)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
@@ -14,7 +14,7 @@ data Config = Config
   , defaultRoles :: [DT.RoleId]
   }
 
-parseEnv :: Read a => (String -> Maybe a) -> String -> IO a
+parseEnv :: (Read a) => (String -> Maybe a) -> String -> IO a
 parseEnv parser key = do
   maybeRawValue <- lookupEnv key
   case maybeRawValue of
@@ -23,7 +23,7 @@ parseEnv parser key = do
       Nothing -> error $ printf "$%s could not be parsed: %s" key rawValue
       Just value -> pure value
 
-readEnv :: Read a => String -> IO a
+readEnv :: (Read a) => String -> IO a
 readEnv = parseEnv readMaybe
 
 getConfig :: IO Config
