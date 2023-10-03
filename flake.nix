@@ -9,15 +9,11 @@
       url = "github:tek/hix";
       inputs.nixpkgs.url = "nixpkgs";
     };
-    hls = {
-      url = "github:haskell/haskell-language-server?ref=2.2.0.0";
-    };
   };
 
   outputs =
   { nixpkgs
   , hix
-  , hls
   , ...
   }:
   let
