@@ -10,7 +10,8 @@ module Jannie (
 import Args (Args' (..), readArgs)
 import Config (Config (..), getConfig)
 import Configuration.Dotenv (defaultConfig, loadFile)
-import Control.Monad (guard, unless)
+import Control.Exception (SomeException, try)
+import Control.Monad (guard, unless, void)
 import Control.Monad.State.Lazy (execState, modify)
 import Data.Foldable (traverse_)
 import Data.List (intercalate)
@@ -29,7 +30,7 @@ import UnliftIO (liftIO)
 
 main :: IO ()
 main = do
-  _ <- loadFile defaultConfig
+  void $ try @SomeException $ loadFile defaultConfig
   args <- readArgs
 
   config@Config {token} <- getConfig args.configFile
