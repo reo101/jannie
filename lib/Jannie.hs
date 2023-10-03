@@ -7,6 +7,7 @@ module Jannie (
   main,
 ) where
 
+import Args (Args' (..), readArgs)
 import Config (Config (..), getConfig)
 import Configuration.Dotenv (defaultConfig, loadFile)
 import Control.Monad (guard, unless)
@@ -29,8 +30,9 @@ import UnliftIO (liftIO)
 main :: IO ()
 main = do
   _ <- loadFile defaultConfig
+  args <- readArgs
 
-  config@Config {token} <- getConfig
+  config@Config {token} <- getConfig args.configFile
 
   -- open ghci and run  [[ :info RunDiscordOpts ]] to see available fields
   t <-

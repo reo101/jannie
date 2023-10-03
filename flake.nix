@@ -42,12 +42,23 @@
       license = "MIT";
       license-file = "LICENSE";
       author = "reo101";
+      component.language = "GHC2021";
+      default-extensions = [
+        "DerivingStrategies"
+        "DeriveAnyClass"
+        "DataKinds"
+        "BlockArguments"
+        "LambdaCase"
+        "ExplicitNamespaces"
+        "RecordWildCards"
+        "OverloadedRecordDot"
+        "OverloadedStrings"
+      ];
       ghc-options = [
         "-Wall"
         "-Wunused-type-patterns"
         "-Wunused-packages"
         "-Wmissing-deriving-strategies"
-        "-Wpartial-fields"
         "-Wredundant-constraints"
         "-Widentities"
         "-Wmissing-export-lists"
@@ -62,8 +73,10 @@
       library = {
         enable = true;
         dependencies = [
+          "aeson"
           "discord-haskell == 1.15.6"
           "text"
+          "optparse-generic"
           "unliftio"
           "dotenv >= 0.11"
           "regex-tdfa"
