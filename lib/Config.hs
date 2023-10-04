@@ -15,6 +15,7 @@ import GHC.Generics (Generic)
 import System.Environment (lookupEnv)
 import Text.Printf (printf)
 import Text.Read (readEither)
+import Utils (whenLeft)
 
 data Config = Config
   { token :: T.Text
@@ -90,7 +91,3 @@ handleParseEnvResultThrow = \case
 formatParseError :: String -> String -> String -> String
 formatParseError key rawValue err =
   printf "$%s=%s could not be parsed: %s" key rawValue err
-
-whenLeft :: (Applicative m) => Either a b -> (a -> m b) -> m b
-whenLeft (Left e) f = f e
-whenLeft (Right x) _ = pure x
