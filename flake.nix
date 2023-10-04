@@ -81,7 +81,6 @@
           "unliftio"
           "dotenv >= 0.11"
           "regex-tdfa"
-          "mtl"
         ];
       };
 

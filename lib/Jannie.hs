@@ -11,10 +11,10 @@ import Args (Args' (..), readArgs)
 import Config (Config (..), getConfig)
 import Configuration.Dotenv (defaultConfig, loadFile)
 import Control.Exception (SomeException, try)
-import Control.Monad (guard, unless, void)
-import Control.Monad.State.Lazy (execState, modify)
-import Data.Foldable (traverse_)
-import Data.Maybe (mapMaybe)
+import Control.Monad (guard, void)
+import Data.List.NonEmpty (NonEmpty, nonEmpty)
+import Data.List.NonEmpty qualified as NonEmpty
+import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text qualified as Text
@@ -24,8 +24,10 @@ import Discord.Interactions qualified as DI
 import Discord.Requests qualified as DR
 import Discord.Types qualified as DT
 import Text.Printf (printf)
-import Text.Regex.TDFA ((=~))
 import UnliftIO (liftIO)
+import User.FN qualified
+import User.GithubUsername qualified
+import User.Name qualified
 import Utils (showText)
 
 -- MAIN
@@ -272,40 +274,27 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
 
       let reply = replyEphemeral interactionId interactionToken
 
-      let validate :: [(T.Text, Text, Text)] -> Maybe (D.DiscordHandler ())
-          validate instructions = do
-            let errors =
-                  flip execState [] $
-                    traverse_
-                      ( \(fieldValue, fieldPattern, message) ->
-                          unless (fieldValue =~ fieldPattern) $
-                            modify $
-                              (:) $
-                                message <> " Гоним нещо като " <> fieldPattern
-                      )
-                      instructions
-
-            if null errors
-              then Nothing
-              else Just $ reply (Text.unlines errors)
-
       let name = getField "име"
       let fn = getField "фн"
 
-      let errors =
-            validate
-              [ (,,)
-                  name
-                  "^[А-Я][а-я]+ [А-Я][а-я]+$"
-                  "Не Ви е валидно името, колега!"
-              , (,,)
-                  fn
-                  "^([0-9]{5}|[0-9]MI[0-9]{7})$"
-                  "Не Ви е валиден факултетният номер, колега!"
-              ]
+      let errorsMay :: Maybe (NonEmpty Text)
+          errorsMay =
+            nonEmpty $
+              catMaybes
+                [ tryParse
+                    User.Name.parse
+                    name
+                    "Не Ви е валидно името, колега!"
+                    User.Name.regexPattern
+                , tryParse
+                    User.FN.parse
+                    fn
+                    "Не Ви е валиден факултетният номер, колега!"
+                    User.FN.regexPattern
+                ]
 
-      case errors of
-        Just callback -> callback
+      case errorsMay of
+        Just errors -> reply $ Text.unlines $ NonEmpty.toList errors
         Nothing -> do
           -- Set nickname
           printError_ $
@@ -367,32 +356,17 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
 
       let reply = replyEphemeral interactionId interactionToken
 
-      let validate :: [(T.Text, Text, Text)] -> Maybe (D.DiscordHandler ())
-          validate instructions = do
-            let errors =
-                  flip execState [] $
-                    traverse_
-                      ( \(fieldValue, fieldPattern, message) ->
-                          unless (fieldValue =~ fieldPattern) $
-                            modify $
-                              (:) $
-                                message <> " Гоним нещо като " <> fieldPattern
-                      )
-                      instructions
-
-            if null errors
-              then Nothing
-              else Just $ reply (Text.unlines errors)
-
       let github = getField "github"
 
-      let errors =
-            validate
-              [ (,,) github "^[a-zA-Z0-9]([-a-zA-Z0-9]{0,38}[a-zA-Z0-9])?$" "Не Ви е валиден GitHub username-а, колега!"
-              ]
+      let error =
+            tryParse
+              User.GithubUsername.parse
+              github
+              "Не Ви е валиден GitHub username-ът, колега!"
+              User.GithubUsername.regexPattern
 
-      case errors of
-        Just callback -> callback
+      case error of
+        Just error -> reply error
         Nothing ->
           replyEphemeral interactionId interactionToken $
             Text.unlines
@@ -424,6 +398,12 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
                     }
                 )
             )
+
+tryParse :: (t -> Maybe a) -> t -> Text -> String -> Maybe Text
+tryParse parse input errorMessage pttern =
+  case parse input of
+    Nothing -> Just $ errorMessage <> " Гоним нещо като " <> Text.pack pttern
+    Just _ -> Nothing
 
 printError_ :: D.DiscordHandler (Either D.RestCallErrorCode b) -> D.DiscordHandler ()
 printError_ =
