@@ -18,9 +18,9 @@ build-type:     Simple
 library
   exposed-modules:
       Command
-      Config
       Config.Common
       Config.Db
+      Config.Discord
       Jannie
       Schema
       User.FN

@@ -1,6 +1,6 @@
 {-# LANGUAGE NoFieldSelectors #-}
 
-module Config (
+module Config.Discord (
   Config (..),
   AuthToken (get),
   getConfig,
@@ -24,7 +24,6 @@ import Utils (whenLeft, (<$$>))
 newtype AuthToken = MkAuthToken {get :: Text}
   deriving newtype (FromJSON)
 
--- TODO: put in Config.Discord or something
 data Config = Config
   { token :: AuthToken
   , guildId :: DT.GuildId

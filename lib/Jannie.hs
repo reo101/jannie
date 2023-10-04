@@ -8,8 +8,9 @@ module Jannie (
 ) where
 
 import Command (Command' (..), readCommand)
-import Config (AuthToken (get), Config (..), getConfig)
 import Config.Db qualified
+import Config.Discord qualified
+import Config.Discord qualified as Discord
 import Configuration.Dotenv (defaultConfig, loadFile)
 import Control.Exception (SomeException, try)
 import Control.Monad (guard, void)
@@ -55,21 +56,21 @@ main = do
               )
               conn
     Command.Run {dbConfigFile, discordConfigFile} -> do
-      config <- getConfig discordConfigFile
-      _dbConfig <- getConfig dbConfigFile
+      config <- Config.Discord.getConfig discordConfigFile
+      _dbConfig <- Config.Db.getConfig dbConfigFile
 
       run config
 
-run :: Config -> IO ()
-run config = do
+run :: Discord.Config -> IO ()
+run discordConfig = do
   -- open ghci and run  [[ :info RunDiscordOpts ]] to see available fields
   t <-
     D.runDiscord $
       D.def
-        { D.discordToken = config.token.get
+        { D.discordToken = discordConfig.token.get
         , D.discordOnStart = startHandler
         , D.discordOnEnd = liftIO $ putStrLn "Ended"
-        , D.discordOnEvent = eventHandler config
+        , D.discordOnEvent = eventHandler discordConfig
         , D.discordOnLog = \s -> TIO.putStrLn s >> TIO.putStrLn ""
         , D.discordGatewayIntent =
             DT.GatewayIntent
@@ -220,8 +221,8 @@ pattern Command
       }
 
 -- If an event handler throws an exception, discord-haskell will continue to run
-eventHandler :: Config -> DT.Event -> D.DiscordHandler ()
-eventHandler (Config {guildId, defaultRoles}) event = case event of
+eventHandler :: Discord.Config -> DT.Event -> D.DiscordHandler ()
+eventHandler (Discord.Config {guildId, defaultRoles}) event = case event of
   DT.Ready _ _ _ _ _ _ (DT.PartialApplication i _) -> do
     vs <-
       D.restCall $
