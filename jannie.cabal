@@ -17,6 +17,7 @@ build-type:     Simple
 
 library
   exposed-modules:
+      App
       Command
       Config.Common
       Config.Db
@@ -56,6 +57,7 @@ library
     , persistent
     , persistent-postgresql
     , regex-tdfa
+    , resource-pool
     , text
     , unliftio
   default-language: GHC2021

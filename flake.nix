@@ -120,6 +120,7 @@
           "persistent-postgresql"
           "mtl"
           "monad-logger"
+          "resource-pool"
           "optparse-generic"
           "unliftio"
           "bytestring"
