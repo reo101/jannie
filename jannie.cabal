@@ -42,7 +42,6 @@ library
     , discord-haskell ==1.15.6
     , dotenv >=0.11
     , mtl
-    , optparse-applicative
     , optparse-generic
     , regex-tdfa
     , text
