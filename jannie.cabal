@@ -19,6 +19,7 @@ library
   exposed-modules:
       Args
       Config
+      Config.Common
       Jannie
       User.FN
       User.GithubUsername
