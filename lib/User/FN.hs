@@ -5,9 +5,18 @@ module User.FN (
 ) where
 
 import Data.Text (Text)
+import Database.Persist.Class.PersistField (PersistField)
+import Database.Persist.Sql (PersistFieldSql)
 import Text.Regex.TDFA ((=~~))
 
 newtype FN = MkFN {get :: Text}
+  deriving newtype
+    ( Show
+    , Eq
+    , Ord
+    , PersistField
+    , PersistFieldSql
+    )
 
 parse :: Text -> Maybe FN
 parse text =

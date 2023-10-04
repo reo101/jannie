@@ -17,10 +17,12 @@ build-type:     Simple
 
 library
   exposed-modules:
-      Args
+      Command
       Config
       Config.Common
+      Config.Db
       Jannie
+      Schema
       User.FN
       User.GithubUsername
       User.Name
@@ -39,13 +41,20 @@ library
       RecordWildCards
       OverloadedRecordDot
       OverloadedStrings
+      UndecidableInstances
+      TypeFamilies
   ghc-options: -Wall -Wunused-type-patterns -Wunused-packages -Wmissing-deriving-strategies -Wredundant-constraints -Widentities -Wmissing-export-lists -Wno-name-shadowing
   build-depends:
       aeson
     , base ==4.*
+    , bytestring
     , discord-haskell ==1.15.6
     , dotenv >=0.11
+    , monad-logger
+    , mtl
     , optparse-generic
+    , persistent
+    , persistent-postgresql
     , regex-tdfa
     , text
     , unliftio
@@ -67,6 +76,8 @@ executable jannie
       RecordWildCards
       OverloadedRecordDot
       OverloadedStrings
+      UndecidableInstances
+      TypeFamilies
   ghc-options: -Wall -Wunused-type-patterns -Wunused-packages -Wmissing-deriving-strategies -Wredundant-constraints -Widentities -Wmissing-export-lists -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base ==4.*
@@ -91,6 +102,8 @@ test-suite jannie-test
       RecordWildCards
       OverloadedRecordDot
       OverloadedStrings
+      UndecidableInstances
+      TypeFamilies
   ghc-options: -Wall -Wunused-type-patterns -Wunused-packages -Wmissing-deriving-strategies -Wredundant-constraints -Widentities -Wmissing-export-lists -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base ==4.*

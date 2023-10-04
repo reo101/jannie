@@ -24,6 +24,7 @@ import Utils (whenLeft, (<$$>))
 newtype AuthToken = MkAuthToken {get :: Text}
   deriving newtype (FromJSON)
 
+-- TODO: put in Config.Discord or something
 data Config = Config
   { token :: AuthToken
   , guildId :: DT.GuildId
@@ -32,6 +33,7 @@ data Config = Config
   deriving stock (Generic)
   deriving anyclass (FromJSON)
 
+-- TODO: rename
 getConfig :: Maybe FilePath -> IO Config
 getConfig configFile = do
   token <- MkAuthToken <$$> readEnvText "AUTH_TOKEN"

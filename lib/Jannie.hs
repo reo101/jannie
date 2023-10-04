@@ -7,12 +7,14 @@ module Jannie (
   main,
 ) where
 
-import Args (Args' (..), readArgs)
-import Config (Config (..), getConfig)
+import Command (Command' (..), readCommand)
 import Config (AuthToken (get), Config (..), getConfig)
+import Config.Db qualified
 import Configuration.Dotenv (defaultConfig, loadFile)
 import Control.Exception (SomeException, try)
 import Control.Monad (guard, void)
+import Control.Monad.Logger (runStdoutLoggingT)
+import Control.Monad.Reader (runReaderT)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Maybe (catMaybes, mapMaybe)
@@ -20,10 +22,13 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TIO
+import Database.Persist.Postgresql qualified as Persist.Postgresql
+import Database.Persist.Sql.Migration qualified as Persistent
 import Discord qualified as D
 import Discord.Interactions qualified as DI
 import Discord.Requests qualified as DR
 import Discord.Types qualified as DT
+import Schema qualified
 import Text.Printf (printf)
 import UnliftIO (liftIO)
 import User.FN qualified
@@ -36,15 +41,32 @@ import Utils (showText)
 main :: IO ()
 main = do
   void $ try @SomeException $ loadFile defaultConfig
-  args <- readArgs
+  readCommand >>= \case
+    Command.Migrate {forReal, dbConfigFile} -> do
+      dbConfig <- Config.Db.getConfig dbConfigFile
+      runStdoutLoggingT $
+        Persist.Postgresql.withPostgresqlConn
+          (Config.Db.toConnString dbConfig)
+          \conn ->
+            runReaderT
+              ( if forReal
+                  then Persistent.runMigration Schema.migrateAll
+                  else Persistent.printMigration Schema.migrateAll
+              )
+              conn
+    Command.Run {dbConfigFile, discordConfigFile} -> do
+      config <- getConfig discordConfigFile
+      _dbConfig <- getConfig dbConfigFile
 
-  config@Config {token} <- getConfig args.configFile
+      run config
 
+run :: Config -> IO ()
+run config = do
   -- open ghci and run  [[ :info RunDiscordOpts ]] to see available fields
   t <-
     D.runDiscord $
       D.def
-        { D.discordToken = token.get
+        { D.discordToken = config.token.get
         , D.discordOnStart = startHandler
         , D.discordOnEnd = liftIO $ putStrLn "Ended"
         , D.discordOnEvent = eventHandler config

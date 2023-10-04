@@ -90,6 +90,8 @@
         "RecordWildCards"
         "OverloadedRecordDot"
         "OverloadedStrings"
+        "UndecidableInstances"
+        "TypeFamilies"
       ];
       ghc-options = [
         "-Wall"
@@ -114,8 +116,13 @@
           "aeson"
           "discord-haskell == 1.15.6"
           "text"
+          "persistent"
+          "persistent-postgresql"
+          "mtl"
+          "monad-logger"
           "optparse-generic"
           "unliftio"
+          "bytestring"
           "dotenv >= 0.11"
           "regex-tdfa"
         ];

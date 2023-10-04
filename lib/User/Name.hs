@@ -7,9 +7,18 @@ module User.Name (
 ) where
 
 import Data.Text (Text)
+import Database.Persist.Class.PersistField
+import Database.Persist.Sql (PersistFieldSql)
 import Text.Regex.TDFA ((=~~))
 
 newtype Name = MkName {get :: Text}
+  deriving newtype
+    ( Show
+    , Eq
+    , Ord
+    , PersistField
+    , PersistFieldSql
+    )
 
 parse :: Text -> Maybe Name
 parse text =
