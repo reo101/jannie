@@ -9,25 +9,25 @@
       url = "github:tek/hix";
       inputs.nixpkgs.url = "nixpkgs";
     };
-    hls = {
-      url = "github:haskell/haskell-language-server?ref=2.2.0.0";
-    };
   };
 
   outputs =
   { nixpkgs
   , hix
-  , hls
   , ...
   }:
   let
     inherit (nixpkgs) lib;
   in
-  hix ({config, ...}: {
-    envs.main = {
-      ghc.compiler = "ghc902";
+  hix ({config, ...}:
+  let pkgs = nixpkgs.legacyPackages.${config.system};
+  in
+  {
+    envs.dev = {
+      ghc.compiler = "ghc946";
+      hls.enable = true;
 
-      buildInputs = with nixpkgs.legacyPackages.${config.system}; [
+      buildInputs = with pkgs; [
         mktemp
       ];
     };
@@ -42,21 +42,42 @@
       license = "MIT";
       license-file = "LICENSE";
       author = "reo101";
-      ghc-options = ["-Wall"];
+      component.language = "GHC2021";
+      default-extensions = [
+        "DerivingStrategies"
+        "DeriveAnyClass"
+        "DataKinds"
+        "BlockArguments"
+        "LambdaCase"
+        "ExplicitNamespaces"
+        "RecordWildCards"
+        "OverloadedRecordDot"
+        "OverloadedStrings"
+      ];
+      ghc-options = [
+        "-Wall"
+        "-Wunused-type-patterns"
+        "-Wunused-packages"
+        "-Wmissing-deriving-strategies"
+        "-Wredundant-constraints"
+        "-Widentities"
+        "-Wmissing-export-lists"
+        "-Wno-name-shadowing"
+      ];
     };
 
     packages.jannie = {
       src = ./.;
       cabal.meta.synopsis = "A discord bot";
+      override = {nodoc, ...}: nodoc;
 
       library = {
         enable = true;
         dependencies = [
-          "containers"
-          "emojis == 0.1.3"
+          "aeson"
           "discord-haskell == 1.15.6"
-          "bytestring"
           "text"
+          "optparse-generic"
           "unliftio"
           "dotenv >= 0.11"
           "regex-tdfa"

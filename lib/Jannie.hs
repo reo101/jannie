@@ -2,36 +2,38 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Jannie (
   main,
 ) where
 
+import Args (Args' (..), readArgs)
 import Config (Config (..), getConfig)
 import Configuration.Dotenv (defaultConfig, loadFile)
-import Control.Monad (guard, unless)
+import Control.Exception (SomeException, try)
+import Control.Monad (guard, unless, void)
 import Control.Monad.State.Lazy (execState, modify)
 import Data.Foldable (traverse_)
 import Data.List (intercalate)
 import Data.Maybe (mapMaybe)
-import qualified Data.Text as T
-import qualified Data.Text.IO as TIO
-import qualified Discord as D
-import qualified Discord.Interactions as DI
-import qualified Discord.Requests as DR
-import qualified Discord.Types as DT
+import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
+import Discord qualified as D
+import Discord.Interactions qualified as DI
+import Discord.Requests qualified as DR
+import Discord.Types qualified as DT
+import Text.Printf (printf)
 import Text.Regex.TDFA ((=~))
 import UnliftIO (liftIO)
-import Text.Printf (printf)
 
 -- MAIN
 
 main :: IO ()
 main = do
-  _ <- loadFile defaultConfig
+  void $ try @SomeException $ loadFile defaultConfig
+  args <- readArgs
 
-  config@Config {token} <- getConfig
+  config@Config {token} <- getConfig args.configFile
 
   -- open ghci and run  [[ :info RunDiscordOpts ]] to see available fields
   t <-
@@ -118,7 +120,6 @@ authenticateSlashCommand =
             ]
     }
 
-
 -- | Authentication command
 githubSlashCommand :: DI.CreateApplicationCommand
 githubSlashCommand =
@@ -165,7 +166,6 @@ pattern Command ::
   DT.InteractionId ->
   DT.InteractionToken ->
   DT.GuildId ->
-  DT.ChannelId ->
   DT.Event
 pattern Command
   { nick
@@ -174,7 +174,6 @@ pattern Command
   , interactionId
   , interactionToken
   , interactionGuildId
-  , interactionChannelId
   } <-
   DT.InteractionCreate
     DI.InteractionApplicationCommand
@@ -182,7 +181,6 @@ pattern Command
       , DI.interactionId
       , DI.interactionToken
       , DI.interactionGuildId = Just interactionGuildId
-      , DI.interactionChannelId = Just interactionChannelId
       , DI.interactionUser =
         DI.MemberOrUser
           ( Left
@@ -221,7 +219,7 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
     , interactionId
     , interactionToken
     } -> do
-      void $
+      printError_ $
         D.restCall $
           DR.CreateInteractionResponse
             interactionId
@@ -292,19 +290,23 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
       let name = getField "име"
       let fn = getField "фн"
 
-      {- FOURMOLU_DISABLE -}
       let errors =
             validate
-              [ (,,) name "^[А-Я][а-я]+ [А-Я][а-я]+$"    "Не Ви е валидно името, колега!"
-              , (,,) fn   "^([0-9]{5}|[0-9]MI[0-9]{7})$" "Не Ви е валиден факултетният номер, колега!"
+              [ (,,)
+                  name
+                  "^[А-Я][а-я]+ [А-Я][а-я]+$"
+                  "Не Ви е валидно името, колега!"
+              , (,,)
+                  fn
+                  "^([0-9]{5}|[0-9]MI[0-9]{7})$"
+                  "Не Ви е валиден факултетният номер, колега!"
               ]
-      {- FOURMOLU_ENABLE -}
 
       case errors of
         Just callback -> callback
         Nothing -> do
           -- Set nickname
-          void $
+          printError_ $
             D.restCall $
               DR.ModifyGuildMember
                 interactionGuildId
@@ -316,7 +318,7 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
                 )
 
           -- Set default roles for user after authentication
-          void $
+          printError_ $
             D.restCall $
               DR.ModifyGuildMember
                 interactionGuildId
@@ -342,11 +344,10 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
         { commandName = "github"
         , optionsData = Just (DI.OptionsDataValues optionsDataValues)
         }
-    , nick = Just nick -- only previously authenticated users will see use this command (for now manually set up for role Студент with overridden permissions in the server)
+    , nick = Just _nick -- only previously authenticated users will see use this command (for now manually set up for role Студент with overridden permissions in the server)
     , user = Just (DT.User {DT.userId})
     , interactionId
     , interactionToken
-    , interactionGuildId
     } -> do
       let getField field =
             head $
@@ -383,27 +384,23 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
 
       let github = getField "github"
 
-      {- FOURMOLU_DISABLE -}
       let errors =
             validate
               [ (,,) github "^[a-zA-Z0-9]([-a-zA-Z0-9]{0,38}[a-zA-Z0-9])?$" "Не Ви е валиден GitHub username-а, колега!"
               ]
-      {- FOURMOLU_ENABLE -}
 
       case errors of
         Just callback -> callback
         Nothing ->
-              replyEphemeral interactionId interactionToken $
-                unlines
-                  [ "Успешно ни пошепнахте своето име в GitHub: " <> T.unpack github <> ". Добра работа, колега <@!" <> show userId <> ">!"
-                  ]
-
-
+          replyEphemeral interactionId interactionToken $
+            unlines
+              [ "Успешно ни пошепнахте своето име в GitHub: " <> T.unpack github <> ". Добра работа, колега <@!" <> show userId <> ">!"
+              ]
   _ -> return ()
   where
     replyEphemeral :: DT.InteractionId -> DT.InteractionToken -> String -> D.DiscordHandler ()
     replyEphemeral interactionId interactionToken message =
-      void $
+      printError_ $
         D.restCall $
           DR.CreateInteractionResponse
             interactionId
@@ -426,8 +423,8 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
                 )
             )
 
-void :: (Show b) => D.DiscordHandler (Either D.RestCallErrorCode b) -> D.DiscordHandler ()
-void =
+printError_ :: D.DiscordHandler (Either D.RestCallErrorCode b) -> D.DiscordHandler ()
+printError_ =
   ( >>=
       ( \case
           Left e -> liftIO $ print e

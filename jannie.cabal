@@ -17,25 +17,36 @@ build-type:     Simple
 
 library
   exposed-modules:
+      Args
       Config
       Jannie
   other-modules:
       Paths_jannie
   hs-source-dirs:
       lib
-  ghc-options: -Wall
+  default-extensions:
+      DerivingStrategies
+      DeriveAnyClass
+      DataKinds
+      BlockArguments
+      LambdaCase
+      ExplicitNamespaces
+      RecordWildCards
+      OverloadedRecordDot
+      OverloadedStrings
+  ghc-options: -Wall -Wunused-type-patterns -Wunused-packages -Wmissing-deriving-strategies -Wredundant-constraints -Widentities -Wmissing-export-lists -Wno-name-shadowing
   build-depends:
-      base ==4.*
-    , bytestring
-    , containers
+      aeson
+    , base ==4.*
     , discord-haskell ==1.15.6
     , dotenv >=0.11
-    , emojis ==0.1.3
     , mtl
+    , optparse-applicative
+    , optparse-generic
     , regex-tdfa
     , text
     , unliftio
-  default-language: Haskell2010
+  default-language: GHC2021
 
 executable jannie
   main-is: Main.hs
@@ -43,11 +54,21 @@ executable jannie
       Paths_jannie
   hs-source-dirs:
       app
-  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  default-extensions:
+      DerivingStrategies
+      DeriveAnyClass
+      DataKinds
+      BlockArguments
+      LambdaCase
+      ExplicitNamespaces
+      RecordWildCards
+      OverloadedRecordDot
+      OverloadedStrings
+  ghc-options: -Wall -Wunused-type-patterns -Wunused-packages -Wmissing-deriving-strategies -Wredundant-constraints -Widentities -Wmissing-export-lists -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base ==4.*
     , jannie
-  default-language: Haskell2010
+  default-language: GHC2021
 
 test-suite jannie-test
   type: exitcode-stdio-1.0
@@ -57,11 +78,21 @@ test-suite jannie-test
       Paths_jannie
   hs-source-dirs:
       test
-  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  default-extensions:
+      DerivingStrategies
+      DeriveAnyClass
+      DataKinds
+      BlockArguments
+      LambdaCase
+      ExplicitNamespaces
+      RecordWildCards
+      OverloadedRecordDot
+      OverloadedStrings
+  ghc-options: -Wall -Wunused-type-patterns -Wunused-packages -Wmissing-deriving-strategies -Wredundant-constraints -Widentities -Wmissing-export-lists -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base ==4.*
     , hedgehog >=1.1 && <1.3
     , jannie
     , tasty ==1.4.*
     , tasty-hedgehog >=1.3 && <1.5
-  default-language: Haskell2010
+  default-language: GHC2021
