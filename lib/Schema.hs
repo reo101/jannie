@@ -4,9 +4,11 @@
 module Schema (
   User (..),
   migrateAll,
+  EntityField (..),
 )
 where
 
+import Database.Persist.Class (PersistEntity (EntityField))
 import Database.Persist.TH (
   MkPersistSettings (mpsPrefixFields),
   mkMigrate,

@@ -119,6 +119,7 @@
           "persistent"
           "persistent-postgresql"
           "mtl"
+          "extra"
           "monad-logger"
           "resource-pool"
           "optparse-generic"
