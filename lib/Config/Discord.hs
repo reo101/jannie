@@ -28,6 +28,7 @@ data Config = Config
   { token :: AuthToken
   , guildId :: DT.GuildId
   , defaultRoles :: [DT.RoleId]
+  , rootRole :: DT.RoleId
   }
   deriving stock (Generic)
   deriving anyclass (FromJSON)
@@ -38,6 +39,7 @@ fromFileAndEnv configFile = do
   token <- MkAuthToken <$$> readEnvText "AUTH_TOKEN"
   guildId <- readEnv "GUILD_ID"
   defaultRoles <- readEnv "DEFAULT_ROLES"
+  rootRole <- readEnv "ROOT_ROLE"
   let parseThrow x = do
         parsed <- Aeson.eitherDecodeFileStrict x
         whenLeft parsed $ \err ->
@@ -48,14 +50,17 @@ fromFileAndEnv configFile = do
       token <- handleParseEnvResultThrow token
       guildId <- handleParseEnvResultThrow guildId
       defaultRoles <- handleParseEnvResultThrow defaultRoles
+      rootRole <- handleParseEnvResultThrow rootRole
       pure Config {..}
     Just configFromFile -> do
       tokenMay <- handleParseEnvResultMaybe token
       guildIdMay <- handleParseEnvResultMaybe guildId
       defaultRolesMay <- handleParseEnvResultMaybe defaultRoles
+      rootRoleMay <- handleParseEnvResultMaybe rootRole
       pure
         Config
           { token = fromMaybe configFromFile.token tokenMay
           , guildId = fromMaybe configFromFile.guildId guildIdMay
           , defaultRoles = fromMaybe configFromFile.defaultRoles defaultRolesMay
+          , rootRole = fromMaybe configFromFile.rootRole rootRoleMay
           }
