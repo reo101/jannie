@@ -122,6 +122,7 @@
           "monad-logger"
           "resource-pool"
           "optparse-generic"
+          "validation"
           "unliftio"
           "bytestring"
           "dotenv >= 0.11"

@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -7,6 +8,7 @@ module Jannie (
   main,
 ) where
 
+import App (App, discordCall, liftDb, runDb)
 import Command (Command' (..), readCommand)
 import Config.Db qualified
 import Config.Discord qualified
@@ -14,17 +16,23 @@ import Config.Discord qualified as Discord
 import Configuration.Dotenv (defaultConfig, loadFile)
 import Control.Exception (SomeException, try)
 import Control.Monad (guard, void)
+import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Logger (runStdoutLoggingT)
 import Control.Monad.Reader (runReaderT)
-import Data.List.NonEmpty (NonEmpty, nonEmpty)
+import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty
-import Data.Maybe (catMaybes, mapMaybe)
+import Data.Maybe (mapMaybe)
+import Data.Pool (Pool)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TIO
+import Data.Validation (Validation)
+import Data.Validation qualified as Validation
+import Database.Persist qualified as Persistent
 import Database.Persist.Postgresql qualified as Persist.Postgresql
 import Database.Persist.Sql.Migration qualified as Persistent
+import Database.Persist.SqlBackend (SqlBackend)
 import Discord qualified as D
 import Discord.Interactions qualified as DI
 import Discord.Requests qualified as DR
@@ -57,20 +65,23 @@ main = do
               conn
     Command.Run {dbConfigFile, discordConfigFile} -> do
       config <- Config.Discord.fromFileAndEnv discordConfigFile
-      _dbConfig <- Config.Db.fromFileAndEnv dbConfigFile
+      dbConfig <- Config.Db.fromFileAndEnv dbConfigFile
+      runStdoutLoggingT $
+        Persist.Postgresql.withPostgresqlPool
+          (Config.Db.toConnString dbConfig)
+          100
+          \connPool -> run connPool config
 
-      run config
-
-run :: Discord.Config -> IO ()
-run discordConfig = do
+run :: (MonadIO m) => Pool SqlBackend -> Discord.Config -> m ()
+run connPool discordConfig = do
   -- open ghci and run  [[ :info RunDiscordOpts ]] to see available fields
   t <-
-    D.runDiscord $
+    liftIO . D.runDiscord $
       D.def
         { D.discordToken = discordConfig.token.get
         , D.discordOnStart = startHandler
         , D.discordOnEnd = liftIO $ putStrLn "Ended"
-        , D.discordOnEvent = eventHandler discordConfig
+        , D.discordOnEvent = runDb connPool . eventHandler discordConfig
         , D.discordOnLog = \s -> TIO.putStrLn s >> TIO.putStrLn ""
         , D.discordGatewayIntent =
             DT.GatewayIntent
@@ -92,7 +103,7 @@ run discordConfig = do
               , DT.gatewayIntentMembers = True
               }
         }
-  TIO.putStrLn t
+  liftIO $ TIO.putStrLn t
 
 -- If the start handler throws an exception, discord-haskell will gracefully shutdown
 --     Use place to execute commands you know you want to complete
@@ -221,11 +232,11 @@ pattern Command
       }
 
 -- If an event handler throws an exception, discord-haskell will continue to run
-eventHandler :: Discord.Config -> DT.Event -> D.DiscordHandler ()
+eventHandler :: Discord.Config -> DT.Event -> App ()
 eventHandler (Discord.Config {guildId, defaultRoles}) event = case event of
   DT.Ready _ _ _ _ _ _ (DT.PartialApplication i _) -> do
     vs <-
-      D.restCall $
+      discordCall $
         DR.BulkOverWriteGuildApplicationCommand
           i
           guildId
@@ -233,7 +244,7 @@ eventHandler (Discord.Config {guildId, defaultRoles}) event = case event of
           , githubSlashCommand
           ]
     liftIO (putStrLn $ "number of application commands added " ++ show (length vs))
-    acs <- D.restCall (DR.GetGuildApplicationCommands i guildId)
+    acs <- discordCall (DR.GetGuildApplicationCommands i guildId)
     case acs of
       Left r -> liftIO $ print r
       Right ls -> liftIO $ putStrLn $ "number of application commands total " ++ show (length ls)
@@ -248,7 +259,7 @@ eventHandler (Discord.Config {guildId, defaultRoles}) event = case event of
     , interactionToken
     } -> do
       printError_ $
-        D.restCall $
+        discordCall $
           DR.CreateInteractionResponse
             interactionId
             interactionToken
@@ -301,28 +312,31 @@ eventHandler (Discord.Config {guildId, defaultRoles}) event = case event of
       let name = getField "име"
       let fn = getField "фн"
 
-      let errorsMay :: Maybe (NonEmpty Text)
-          errorsMay =
-            nonEmpty $
-              catMaybes
-                [ tryParse
-                    User.Name.parse
-                    name
-                    "Не Ви е валидно името, колега!"
-                    User.Name.regexPattern
-                , tryParse
-                    User.FN.parse
-                    fn
-                    "Не Ви е валиден факултетният номер, колега!"
-                    User.FN.regexPattern
-                ]
+      let user :: Validation (NonEmpty Text) Schema.User
+          user = do
+            name <-
+              Validation.validationNel $
+                tryParse
+                  User.Name.parse
+                  name
+                  "Не Ви е валидно името, колега!"
+                  User.Name.regexPattern
+            fn <-
+              Validation.validationNel $
+                tryParse
+                  User.FN.parse
+                  fn
+                  "Не Ви е валиден факултетният номер, колега!"
+                  User.FN.regexPattern
+            pure Schema.User {..}
 
-      case errorsMay of
-        Just errors -> reply $ Text.unlines $ NonEmpty.toList errors
-        Nothing -> do
+      case user of
+        Validation.Failure errors -> reply $ Text.unlines $ NonEmpty.toList errors
+        Validation.Success user -> do
           -- Set nickname
+          liftDb $ Persistent.insert user
           printError_ $
-            D.restCall $
+            discordCall $
               DR.ModifyGuildMember
                 interactionGuildId
                 userId
@@ -334,7 +348,7 @@ eventHandler (Discord.Config {guildId, defaultRoles}) event = case event of
 
           -- Set default roles for user after authentication
           printError_ $
-            D.restCall $
+            discordCall $
               DR.ModifyGuildMember
                 interactionGuildId
                 userId
@@ -390,18 +404,19 @@ eventHandler (Discord.Config {guildId, defaultRoles}) event = case event of
               User.GithubUsername.regexPattern
 
       case error of
-        Just error -> reply error
-        Nothing ->
+        Left error -> reply error
+        -- TODO: add github to db, possibly parse from user name?
+        Right _github ->
           replyEphemeral interactionId interactionToken $
             Text.unlines
               [ "Успешно ни пошепнахте своето име в GitHub: " <> github <> ". Добра работа, колега <@!" <> showText userId <> ">!"
               ]
   _ -> return ()
   where
-    replyEphemeral :: DT.InteractionId -> DT.InteractionToken -> Text -> D.DiscordHandler ()
+    replyEphemeral :: DT.InteractionId -> DT.InteractionToken -> Text -> App ()
     replyEphemeral interactionId interactionToken message =
       printError_ $
-        D.restCall $
+        discordCall $
           DR.CreateInteractionResponse
             interactionId
             interactionToken
@@ -423,13 +438,13 @@ eventHandler (Discord.Config {guildId, defaultRoles}) event = case event of
                 )
             )
 
-tryParse :: (t -> Maybe a) -> t -> Text -> String -> Maybe Text
+tryParse :: (a -> Maybe b) -> a -> Text -> String -> Either Text b
 tryParse parse input errorMessage pttern =
   case parse input of
-    Nothing -> Just $ errorMessage <> " Гоним нещо като " <> Text.pack pttern
-    Just _ -> Nothing
+    Nothing -> Left $ errorMessage <> " Гоним нещо като " <> Text.pack pttern
+    Just b -> Right b
 
-printError_ :: D.DiscordHandler (Either D.RestCallErrorCode b) -> D.DiscordHandler ()
+printError_ :: (MonadIO m) => m (Either D.RestCallErrorCode b) -> m ()
 printError_ =
   ( >>=
       ( \case

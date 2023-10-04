@@ -60,6 +60,7 @@ library
     , resource-pool
     , text
     , unliftio
+    , validation
   default-language: GHC2021
 
 executable jannie
