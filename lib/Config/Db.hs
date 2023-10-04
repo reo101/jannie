@@ -2,7 +2,7 @@
 
 module Config.Db (
   Config (..),
-  getConfig,
+  fromFileAndEnv,
   toConnString,
 )
 where
@@ -35,8 +35,8 @@ data Config = MkConfig
   deriving anyclass (FromJSON)
 
 -- TODO: rename
-getConfig :: Maybe FilePath -> IO Config
-getConfig configFile = do
+fromFileAndEnv :: Maybe FilePath -> IO Config
+fromFileAndEnv configFile = do
   user <- readEnvText "PGUSER"
   password <- readEnvText "PGPASSWORD"
   host <- readEnvText "PGHOST"

@@ -44,7 +44,7 @@ main = do
   void $ try @SomeException $ loadFile defaultConfig
   readCommand >>= \case
     Command.Migrate {forReal, dbConfigFile} -> do
-      dbConfig <- Config.Db.getConfig dbConfigFile
+      dbConfig <- Config.Db.fromFileAndEnv dbConfigFile
       runStdoutLoggingT $
         Persist.Postgresql.withPostgresqlConn
           (Config.Db.toConnString dbConfig)
@@ -56,8 +56,8 @@ main = do
               )
               conn
     Command.Run {dbConfigFile, discordConfigFile} -> do
-      config <- Config.Discord.getConfig discordConfigFile
-      _dbConfig <- Config.Db.getConfig dbConfigFile
+      config <- Config.Discord.fromFileAndEnv discordConfigFile
+      _dbConfig <- Config.Db.fromFileAndEnv dbConfigFile
 
       run config
 

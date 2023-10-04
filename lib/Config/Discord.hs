@@ -3,7 +3,7 @@
 module Config.Discord (
   Config (..),
   AuthToken (get),
-  getConfig,
+  fromFileAndEnv,
 ) where
 
 import Config.Common (
@@ -33,8 +33,8 @@ data Config = Config
   deriving anyclass (FromJSON)
 
 -- TODO: rename
-getConfig :: Maybe FilePath -> IO Config
-getConfig configFile = do
+fromFileAndEnv :: Maybe FilePath -> IO Config
+fromFileAndEnv configFile = do
   token <- MkAuthToken <$$> readEnvText "AUTH_TOKEN"
   guildId <- readEnv "GUILD_ID"
   defaultRoles <- readEnv "DEFAULT_ROLES"
