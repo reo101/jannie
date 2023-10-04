@@ -7,12 +7,19 @@ module Schema (
 )
 where
 
-import Database.Persist.TH
+import Database.Persist.TH (
+  MkPersistSettings (mpsPrefixFields),
+  mkMigrate,
+  mkPersist,
+  persistLowerCase,
+  share,
+  sqlSettings,
+ )
 import User.FN qualified as User
 import User.Name qualified as User
 
 share
-  [mkPersist sqlSettings, mkMigrate "migrateAll"]
+  [mkPersist sqlSettings {mpsPrefixFields = False}, mkMigrate "migrateAll"]
   [persistLowerCase|
 User
     name User.Name
