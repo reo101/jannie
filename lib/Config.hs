@@ -2,6 +2,7 @@
 
 module Config (
   Config (..),
+  AuthToken (get),
   getConfig,
 ) where
 
@@ -9,6 +10,7 @@ import Control.Exception (throwIO)
 import Data.Aeson (FromJSON)
 import Data.Aeson qualified as Aeson
 import Data.Maybe (fromMaybe)
+import Data.Text (Text)
 import Data.Text qualified as T
 import Discord.Types qualified as DT
 import GHC.Generics (Generic)
@@ -17,8 +19,11 @@ import Text.Printf (printf)
 import Text.Read (readEither)
 import Utils (whenLeft)
 
+newtype AuthToken = MkAuthToken {get :: Text}
+  deriving newtype (FromJSON)
+
 data Config = Config
-  { token :: T.Text
+  { token :: AuthToken
   , guildId :: DT.GuildId
   , defaultRoles :: [DT.RoleId]
   }
@@ -27,7 +32,7 @@ data Config = Config
 
 getConfig :: Maybe FilePath -> IO Config
 getConfig configFile = do
-  token <- parseEnv (Right . T.pack) "AUTH_TOKEN"
+  token <- parseEnv (Right . MkAuthToken . T.pack) "AUTH_TOKEN"
   guildId <- readEnv "GUILD_ID"
   defaultRoles <- readEnv "DEFAULT_ROLES"
   let parseThrow x = do

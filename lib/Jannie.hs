@@ -9,6 +9,7 @@ module Jannie (
 
 import Args (Args' (..), readArgs)
 import Config (Config (..), getConfig)
+import Config (AuthToken (get), Config (..), getConfig)
 import Configuration.Dotenv (defaultConfig, loadFile)
 import Control.Exception (SomeException, try)
 import Control.Monad (guard, void)
@@ -43,7 +44,7 @@ main = do
   t <-
     D.runDiscord $
       D.def
-        { D.discordToken = token
+        { D.discordToken = token.get
         , D.discordOnStart = startHandler
         , D.discordOnEnd = liftIO $ putStrLn "Ended"
         , D.discordOnEvent = eventHandler config
