@@ -20,14 +20,51 @@
     inherit (nixpkgs) lib;
   in
   hix ({config, ...}:
-  let pkgs = nixpkgs.legacyPackages.${config.system};
+  let
+    pkgs = nixpkgs.legacyPackages.${config.system};
+    postgresqlPackage = pkgs.postgresql_14;
   in
   {
-    envs.dev = {
+    envs.dev =
+    let
+      basePort = 10000;
+      pgPort = 5432;
+
+      PGUSER = "jannie";
+      PGPASSWORD ="asdf";
+      PGHOST = "localhost";
+      PGPORT = basePort + 5432;
+      PGDATABASE = "jannie";
+    in {
       ghc.compiler = "ghc946";
       hls.enable = true;
+      inherit basePort;
+
+      env = {
+        inherit
+          PGUSER
+          PGPASSWORD
+          PGHOST
+          PGPORT
+          PGDATABASE;
+      };
+
+      services.postgres = {
+        enable = true;
+        config = {
+          package = postgresqlPackage;
+          name = PGDATABASE;
+          # note that this automatically gets added to basePort by hix
+          port = pgPort;
+          creds = {
+            user = PGUSER;
+            password = PGPASSWORD;
+          };
+        };
+      };
 
       buildInputs = with pkgs; [
+        postgresqlPackage
         mktemp
       ];
     };
