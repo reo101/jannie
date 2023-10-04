@@ -20,6 +20,7 @@ library
       Args
       Config
       Jannie
+      Utils
   other-modules:
       Paths_jannie
   hs-source-dirs:

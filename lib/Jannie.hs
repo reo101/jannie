@@ -14,9 +14,10 @@ import Control.Exception (SomeException, try)
 import Control.Monad (guard, unless, void)
 import Control.Monad.State.Lazy (execState, modify)
 import Data.Foldable (traverse_)
-import Data.List (intercalate)
 import Data.Maybe (mapMaybe)
+import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text qualified as Text
 import Data.Text.IO qualified as TIO
 import Discord qualified as D
 import Discord.Interactions qualified as DI
@@ -25,6 +26,7 @@ import Discord.Types qualified as DT
 import Text.Printf (printf)
 import Text.Regex.TDFA ((=~))
 import UnliftIO (liftIO)
+import Utils (showText)
 
 -- MAIN
 
@@ -270,7 +272,7 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
 
       let reply = replyEphemeral interactionId interactionToken
 
-      let validate :: [(T.Text, String, String)] -> Maybe (D.DiscordHandler ())
+      let validate :: [(T.Text, Text, Text)] -> Maybe (D.DiscordHandler ())
           validate instructions = do
             let errors =
                   flip execState [] $
@@ -285,7 +287,7 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
 
             if null errors
               then Nothing
-              else Just $ reply (unlines errors)
+              else Just $ reply (Text.unlines errors)
 
       let name = getField "име"
       let fn = getField "фн"
@@ -330,11 +332,11 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
 
           -- (Privately) Report success and prompt the manual selection of channels to follow
           replyEphemeral interactionId interactionToken $
-            unlines
-              [ "Успешно Ви бе генериран прякор. Добра работа, колега <@!" <> show userId <> ">!"
-              , let roleMentions :: [String]
-                    roleMentions = map (printf "<@&%s>" . show) defaultRoles
-                 in "Автоматично получавате ролите: " <> intercalate ", " roleMentions <> "."
+            Text.unlines
+              [ "Успешно Ви бе генериран прякор. Добра работа, колега <@!" <> showText userId <> ">!"
+              , let roleMentions :: [Text]
+                    roleMentions = map (Text.pack . printf "<@&%s>" . show) defaultRoles
+                 in "Автоматично получавате ролите: " <> Text.intercalate ", " roleMentions <> "."
               , "Сега можете да навигирате до <id:customize> и да си изберете кои групи да следите."
               ]
   -- Set a github username
@@ -365,7 +367,7 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
 
       let reply = replyEphemeral interactionId interactionToken
 
-      let validate :: [(T.Text, String, String)] -> Maybe (D.DiscordHandler ())
+      let validate :: [(T.Text, Text, Text)] -> Maybe (D.DiscordHandler ())
           validate instructions = do
             let errors =
                   flip execState [] $
@@ -380,7 +382,7 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
 
             if null errors
               then Nothing
-              else Just $ reply (unlines errors)
+              else Just $ reply (Text.unlines errors)
 
       let github = getField "github"
 
@@ -393,12 +395,12 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
         Just callback -> callback
         Nothing ->
           replyEphemeral interactionId interactionToken $
-            unlines
-              [ "Успешно ни пошепнахте своето име в GitHub: " <> T.unpack github <> ". Добра работа, колега <@!" <> show userId <> ">!"
+            Text.unlines
+              [ "Успешно ни пошепнахте своето име в GitHub: " <> github <> ". Добра работа, колега <@!" <> showText userId <> ">!"
               ]
   _ -> return ()
   where
-    replyEphemeral :: DT.InteractionId -> DT.InteractionToken -> String -> D.DiscordHandler ()
+    replyEphemeral :: DT.InteractionId -> DT.InteractionToken -> Text -> D.DiscordHandler ()
     replyEphemeral interactionId interactionToken message =
       printError_ $
         D.restCall $
@@ -409,7 +411,7 @@ eventHandler (Config {guildId, defaultRoles}) event = case event of
                 ( DI.InteractionResponseMessage
                     { DI.interactionResponseMessageTTS = Nothing
                     , DI.interactionResponseMessageContent =
-                        Just $ T.pack message
+                        Just message
                     , DI.interactionResponseMessageAttachments = Nothing
                     , DI.interactionResponseMessageAllowedMentions = Nothing
                     , DI.interactionResponseMessageComponents = Nothing
