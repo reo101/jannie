@@ -20,14 +20,51 @@
     inherit (nixpkgs) lib;
   in
   hix ({config, ...}:
-  let pkgs = nixpkgs.legacyPackages.${config.system};
+  let
+    pkgs = nixpkgs.legacyPackages.${config.system};
+    postgresqlPackage = pkgs.postgresql_14;
   in
   {
-    envs.dev = {
+    envs.dev =
+    let
+      basePort = 10000;
+      pgPort = 5432;
+
+      PGUSER = "jannie";
+      PGPASSWORD ="asdf";
+      PGHOST = "localhost";
+      PGPORT = basePort + 5432;
+      PGDATABASE = "jannie";
+    in {
       ghc.compiler = "ghc946";
       hls.enable = true;
+      inherit basePort;
+
+      env = {
+        inherit
+          PGUSER
+          PGPASSWORD
+          PGHOST
+          PGPORT
+          PGDATABASE;
+      };
+
+      services.postgres = {
+        enable = true;
+        config = {
+          package = postgresqlPackage;
+          name = PGDATABASE;
+          # note that this automatically gets added to basePort by hix
+          port = pgPort;
+          creds = {
+            user = PGUSER;
+            password = PGPASSWORD;
+          };
+        };
+      };
 
       buildInputs = with pkgs; [
+        postgresqlPackage
         mktemp
       ];
     };
@@ -53,6 +90,8 @@
         "RecordWildCards"
         "OverloadedRecordDot"
         "OverloadedStrings"
+        "UndecidableInstances"
+        "TypeFamilies"
       ];
       ghc-options = [
         "-Wall"
@@ -77,11 +116,18 @@
           "aeson"
           "discord-haskell == 1.15.6"
           "text"
+          "persistent"
+          "persistent-postgresql"
+          "mtl"
+          "extra"
+          "monad-logger"
+          "resource-pool"
           "optparse-generic"
+          "validation"
           "unliftio"
+          "bytestring"
           "dotenv >= 0.11"
           "regex-tdfa"
-          "mtl"
         ];
       };
 

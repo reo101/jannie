@@ -17,9 +17,17 @@ build-type:     Simple
 
 library
   exposed-modules:
-      Args
-      Config
+      App
+      Command
+      Config.Common
+      Config.Db
+      Config.Discord
       Jannie
+      Schema
+      User.FN
+      User.GithubUsername
+      User.Name
+      Utils
   other-modules:
       Paths_jannie
   hs-source-dirs:
@@ -34,18 +42,26 @@ library
       RecordWildCards
       OverloadedRecordDot
       OverloadedStrings
+      UndecidableInstances
+      TypeFamilies
   ghc-options: -Wall -Wunused-type-patterns -Wunused-packages -Wmissing-deriving-strategies -Wredundant-constraints -Widentities -Wmissing-export-lists -Wno-name-shadowing
   build-depends:
       aeson
     , base ==4.*
+    , bytestring
     , discord-haskell ==1.15.6
     , dotenv >=0.11
+    , extra
+    , monad-logger
     , mtl
-    , optparse-applicative
     , optparse-generic
+    , persistent
+    , persistent-postgresql
     , regex-tdfa
+    , resource-pool
     , text
     , unliftio
+    , validation
   default-language: GHC2021
 
 executable jannie
@@ -64,6 +80,8 @@ executable jannie
       RecordWildCards
       OverloadedRecordDot
       OverloadedStrings
+      UndecidableInstances
+      TypeFamilies
   ghc-options: -Wall -Wunused-type-patterns -Wunused-packages -Wmissing-deriving-strategies -Wredundant-constraints -Widentities -Wmissing-export-lists -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base ==4.*
@@ -88,6 +106,8 @@ test-suite jannie-test
       RecordWildCards
       OverloadedRecordDot
       OverloadedStrings
+      UndecidableInstances
+      TypeFamilies
   ghc-options: -Wall -Wunused-type-patterns -Wunused-packages -Wmissing-deriving-strategies -Wredundant-constraints -Widentities -Wmissing-export-lists -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base ==4.*
