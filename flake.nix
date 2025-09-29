@@ -22,49 +22,18 @@
   hix ({config, ...}:
   let
     pkgs = nixpkgs.legacyPackages.${config.system};
-    postgresqlPackage = pkgs.postgresql_14;
   in
   {
     envs.dev =
     let
       basePort = 10000;
       pgPort = 5432;
-
-      PGUSER = "jannie";
-      PGPASSWORD ="asdf";
-      PGHOST = "localhost";
-      PGPORT = basePort + 5432;
-      PGDATABASE = "jannie";
     in {
-      ghc.compiler = "ghc946";
+      ghc.compiler = "ghc910";
       hls.enable = true;
       inherit basePort;
 
-      env = {
-        inherit
-          PGUSER
-          PGPASSWORD
-          PGHOST
-          PGPORT
-          PGDATABASE;
-      };
-
-      services.postgres = {
-        enable = true;
-        config = {
-          package = postgresqlPackage;
-          name = PGDATABASE;
-          # note that this automatically gets added to basePort by hix
-          port = pgPort;
-          creds = {
-            user = PGUSER;
-            password = PGPASSWORD;
-          };
-        };
-      };
-
       buildInputs = with pkgs; [
-        postgresqlPackage
         mktemp
       ];
     };
@@ -113,15 +82,12 @@
       library = {
         enable = true;
         dependencies = [
+          "discord-haskell == 1.18.0"
           "aeson"
-          "discord-haskell == 1.15.6"
           "text"
-          "persistent"
-          "persistent-postgresql"
           "mtl"
           "extra"
           "monad-logger"
-          "resource-pool"
           "optparse-generic"
           "validation"
           "unliftio"
@@ -136,9 +102,9 @@
       test = {
         enable = true;
         dependencies = [
-          "hedgehog >= 1.1 && < 1.3"
-          "tasty ^>= 1.4"
-          "tasty-hedgehog >= 1.3 && < 1.5"
+          "hedgehog"
+          "tasty"
+          "tasty-hedgehog"
         ];
       };
     };

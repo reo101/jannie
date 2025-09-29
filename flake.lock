@@ -2,15 +2,14 @@
   "nodes": {
     "hix": {
       "inputs": {
-        "nixpkgs": "nixpkgs",
-        "thax": "thax"
+        "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1695049619,
-        "narHash": "sha256-Gy/tjs1pBLknI14Mcp46ksdqFb0xubTf3n9bqJZSOHE=",
+        "lastModified": 1756814687,
+        "narHash": "sha256-bbIEFuXqLhRJSYWKWH0S7yUy6m+CHGkAfr5quSibO40=",
         "owner": "tek",
         "repo": "hix",
-        "rev": "677d00c20355e42191693d063e5561d2a6f45448",
+        "rev": "1edcc17b23175052ea9b32c34360323f26a99567",
         "type": "github"
       },
       "original": {
@@ -21,26 +20,25 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1695830400,
-        "narHash": "sha256-gToZXQVr0G/1WriO83olnqrLSHF2Jb8BPcmCt497ro0=",
-        "path": "/nix/store/8lg5579v1k5mc63ypzfagrcl8l32x3bh-source",
-        "rev": "8a86b98f0ba1c405358f1b71ff8b5e1d317f5db2",
-        "type": "path"
+        "lastModified": 1759070547,
+        "narHash": "sha256-JVZl8NaVRYb0+381nl7LvPE+A774/dRpif01FKLrYFQ=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "647e5c14cbd5067f44ac86b74f014962df460840",
+        "type": "github"
       },
       "original": {
-        "owner": "nixos",
-        "repo": "nixpkgs",
-        "rev": "5148520bfab61f99fd25fb9ff7bfbb50dad3c9db",
-        "type": "github"
+        "id": "nixpkgs",
+        "type": "indirect"
       }
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1694959747,
-        "narHash": "sha256-CXQ2MuledDVlVM5dLC4pB41cFlBWxRw4tCBsFrq3cRk=",
+        "lastModified": 1759036355,
+        "narHash": "sha256-0m27AKv6ka+q270dw48KflE0LwQYrO7Fm4/2//KCVWg=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "970a59bd19eff3752ce552935687100c46e820a5",
+        "rev": "e9f00bd893984bc8ce46c895c3bf7cac95331127",
         "type": "github"
       },
       "original": {
@@ -54,21 +52,6 @@
       "inputs": {
         "hix": "hix",
         "nixpkgs": "nixpkgs_2"
-      }
-    },
-    "thax": {
-      "locked": {
-        "lastModified": 1691091387,
-        "narHash": "sha256-i1dc/XqsIQizZ09o2ltX10zhV/3LCc0ZUqsS7enyN+g=",
-        "owner": "tek",
-        "repo": "thax",
-        "rev": "10fa7482d171739414fc0d829005b4055799e4c6",
-        "type": "github"
-      },
-      "original": {
-        "owner": "tek",
-        "repo": "thax",
-        "type": "github"
       }
     }
   },

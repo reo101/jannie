@@ -8,22 +8,20 @@ module Jannie (
   main,
 ) where
 
-import App (App, discordCall, liftDb, runDb)
+import App (discordCall)
 import Command (Command' (..), readCommand)
-import Config.Db qualified
 import Config.Discord qualified
 import Config.Discord qualified as Discord
 import Configuration.Dotenv (defaultConfig, loadFile)
 import Control.Exception (SomeException, try)
 import Control.Monad.Except
-import Control.Monad.Extra (whileJustM)
+import Control.Monad.Extra (guard, void, whileJustM)
 import Control.Monad.Logger (runStdoutLoggingT)
-import Control.Monad.Reader (runReaderT)
+import Control.Monad.Reader (MonadIO, liftIO, runReaderT)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.List.NonEmpty.Extra (maximum1, maximumOn1)
 import Data.Maybe (mapMaybe)
-import Data.Pool (Pool)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text qualified as Text
@@ -31,20 +29,15 @@ import Data.Text.IO qualified as TIO
 import Data.Text.IO qualified as Text.IO
 import Data.Validation (Validation)
 import Data.Validation qualified as Validation
-import Database.Persist qualified as Persistent
-import Database.Persist.Postgresql qualified as Persist.Postgresql
-import Database.Persist.Sql.Migration qualified as Persistent
-import Database.Persist.SqlBackend (SqlBackend)
 import Discord qualified as D
 import Discord.Interactions qualified as DI
 import Discord.Requests qualified as DR
 import Discord.Types qualified as DT
-import Schema qualified
 import Text.Printf (printf)
 import User.FN qualified
-import User.GithubUsername qualified
 import User.Name qualified
 import Utils (showText)
+import Discord (DiscordHandler)
 
 -- MAIN
 
@@ -52,29 +45,12 @@ main :: IO ()
 main = do
   void $ try @SomeException $ loadFile defaultConfig
   readCommand >>= \case
-    Command.Migrate {forReal, dbConfigFile} -> do
-      dbConfig <- Config.Db.fromFileAndEnv dbConfigFile
-      runStdoutLoggingT $
-        Persist.Postgresql.withPostgresqlConn
-          (Config.Db.toConnString dbConfig)
-          \conn ->
-            runReaderT
-              ( if forReal
-                  then Persistent.runMigration Schema.migrateAll
-                  else Persistent.printMigration Schema.migrateAll
-              )
-              conn
-    Command.Run {dbConfigFile, discordConfigFile} -> do
+    Command.Run {discordConfigFile} -> do
       config <- Config.Discord.fromFileAndEnv discordConfigFile
-      dbConfig <- Config.Db.fromFileAndEnv dbConfigFile
-      runStdoutLoggingT $
-        Persist.Postgresql.withPostgresqlPool
-          (Config.Db.toConnString dbConfig)
-          100
-          \connPool -> run connPool config
+      run config
 
-run :: (MonadIO m) => Pool SqlBackend -> Discord.Config -> m ()
-run connPool discordConfig = do
+run :: (MonadIO m) => Discord.Config -> m ()
+run discordConfig = do
   -- open ghci and run  [[ :info RunDiscordOpts ]] to see available fields
   t <-
     liftIO . D.runDiscord $
@@ -82,11 +58,13 @@ run connPool discordConfig = do
         { D.discordToken = discordConfig.token.get
         , D.discordOnStart = startHandler
         , D.discordOnEnd = liftIO $ putStrLn "Ended"
-        , D.discordOnEvent = runDb connPool . eventHandler discordConfig
+        , D.discordOnEvent = eventHandler discordConfig
         , D.discordOnLog = \s -> TIO.putStrLn s >> TIO.putStrLn ""
         , D.discordGatewayIntent =
             DT.GatewayIntent
-              { DT.gatewayIntentWebhooks = True
+              { DT.gatewayIntentAutoModerationExecution = True
+              , DT.gatewayIntentAutoModerationConfiguration = True
+              , DT.gatewayIntentWebhooks = True
               , DT.gatewayIntentVoiceStates = True
               , DT.gatewayIntentMessageTyping = True
               , DT.gatewayIntentMessageReactions = True
@@ -111,14 +89,25 @@ run connPool discordConfig = do
 startHandler :: D.DiscordHandler ()
 startHandler = do
   let activity =
-        D.def
+        DT.Activity
           { DT.activityName = "over students 👀"
           , DT.activityType = DT.ActivityTypeWatching
+          , DT.activityUrl = Nothing
+          , DT.activityCreatedAt = 0
+          , DT.activityTimeStamps = Nothing
+          , DT.activityApplicationId = Nothing
+          , DT.activityDetails = Nothing
+          , DT.activityState = Nothing
+          , DT.activityEmoji = Nothing
+          , DT.activityParty = Nothing
+          , DT.activityInstance = Nothing
+          , DT.activityFlags = Nothing
+          , DT.activityButtons = Nothing
           }
   let opts =
         DT.UpdateStatusOpts
           { DT.updateStatusOptsSince = Nothing
-          , DT.updateStatusOptsGame = Just activity
+          , DT.updateStatusOptsActivities = pure activity
           , DT.updateStatusOptsNewStatus = DT.UpdateStatusOnline
           , DT.updateStatusOptsAFK = False
           }
@@ -158,44 +147,6 @@ authenticateSlashCommand =
                 , DI.optionValueStringMaxLen = Just 10
                 }
             ]
-    }
-
--- | Authentication command
-githubSlashCommand :: DI.CreateApplicationCommand
-githubSlashCommand =
-  DI.CreateApplicationCommandChatInput
-    { DI.createName = "github"
-    , DI.createLocalizedName = Nothing
-    , DI.createDescription = "GitHub Username Helper"
-    , DI.createLocalizedDescription = Nothing
-    , DI.createDefaultMemberPermissions = Just "0"
-    , DI.createDMPermission = Nothing
-    , DI.createOptions =
-        Just $
-          DI.OptionsValues
-            [ DI.OptionValueString
-                { DI.optionValueName = "github"
-                , DI.optionValueLocalizedName = Nothing
-                , DI.optionValueDescription = "Username в GitHub (https://github.com/{USERNAME})"
-                , DI.optionValueLocalizedDescription = Nothing
-                , DI.optionValueRequired = True
-                , DI.optionValueStringChoices = Left False
-                , DI.optionValueStringMinLen = Just 1
-                , DI.optionValueStringMaxLen = Just 40
-                }
-            ]
-    }
-
-syncSlashCommand :: DI.CreateApplicationCommand
-syncSlashCommand =
-  DI.CreateApplicationCommandChatInput
-    { DI.createName = "sync"
-    , DI.createLocalizedName = Nothing
-    , DI.createDescription = "TODO: doesn't work. Sync users to db"
-    , DI.createLocalizedDescription = Nothing
-    , DI.createDefaultMemberPermissions = Just "0"
-    , DI.createDMPermission = Nothing
-    , DI.createOptions = Nothing
     }
 
 pattern DataChatInput ::
@@ -248,7 +199,7 @@ pattern Command
       }
 
 -- If an event handler throws an exception, discord-haskell will continue to run
-eventHandler :: Discord.Config -> DT.Event -> App ()
+eventHandler :: Discord.Config -> DT.Event -> DiscordHandler ()
 eventHandler config@(Discord.Config {guildId, defaultRoles}) event = case event of
   DT.Ready _ _ _ _ _ _ (DT.PartialApplication i _) -> do
     vs <-
@@ -257,8 +208,6 @@ eventHandler config@(Discord.Config {guildId, defaultRoles}) event = case event 
           i
           guildId
           [ authenticateSlashCommand
-          , githubSlashCommand
-          , syncSlashCommand
           ]
     liftIO (putStrLn $ "number of application commands added " ++ show (length vs))
     acs <- discordCall (DR.GetGuildApplicationCommands i guildId)
@@ -329,7 +278,7 @@ eventHandler config@(Discord.Config {guildId, defaultRoles}) event = case event 
       let name = getField "име"
       let fn = getField "фн"
 
-      let user :: Validation (NonEmpty Text) Schema.User
+      let user :: Validation (NonEmpty Text) (User.Name.Name, User.FN.FN)
           user = do
             name <-
               Validation.validationNel $
@@ -345,13 +294,11 @@ eventHandler config@(Discord.Config {guildId, defaultRoles}) event = case event 
                   fn
                   "Не Ви е валиден факултетният номер, колега!"
                   User.FN.regexPattern
-            pure Schema.User {..}
+            pure (name, fn)
 
       case user of
         Validation.Failure errors -> reply $ Text.unlines $ NonEmpty.toList errors
         Validation.Success user -> do
-          -- Set nickname
-          liftDb $ Persistent.insert user
           printError_ $
             discordCall $
               DR.ModifyGuildMember
@@ -383,94 +330,9 @@ eventHandler config@(Discord.Config {guildId, defaultRoles}) event = case event 
                  in "Автоматично получавате ролите: " <> Text.intercalate ", " roleMentions <> "."
               , "Сега можете да навигирате до <id:customize> и да си изберете кои групи да следите."
               ]
-  -- Set a github username
-  Command
-    { commandData =
-      DataChatInput
-        { commandName = "github"
-        , optionsData = Just (DI.OptionsDataValues optionsDataValues)
-        }
-    , nick = Just _nick -- only previously authenticated users will see use this command (for now manually set up for role Студент with overridden permissions in the server)
-    , user = Just (DT.User {DT.userId})
-    , interactionId
-    , interactionToken
-    } -> do
-      let getField field =
-            head $
-              mapMaybe
-                ( \case
-                    DI.OptionDataValueString
-                      { DI.optionDataValueName = fieldName
-                      , DI.optionDataValueString = Right fieldValue
-                      } -> do
-                        guard $ field == fieldName
-                        pure fieldValue
-                    _ -> Nothing
-                )
-                optionsDataValues
-
-      let reply = replyEphemeral interactionId interactionToken
-
-      let github = getField "github"
-
-      let error =
-            tryParse
-              User.GithubUsername.parse
-              github
-              "Не Ви е валиден GitHub username-ът, колега!"
-              User.GithubUsername.regexPattern
-
-      case error of
-        Left error -> reply error
-        -- TODO: add github to db, possibly parse from user name?
-        Right _github ->
-          replyEphemeral interactionId interactionToken $
-            Text.unlines
-              [ "Успешно ни пошепнахте своето име в GitHub: " <> github <> ". Добра работа, колега <@!" <> showText userId <> ">!"
-              ]
-  Command
-    { commandData =
-      DataChatInput
-        { commandName = "sync"
-        }
-    , nick = Just _
-    , user = Just _
-    , roles
-    , interactionId
-    , interactionToken
-    , interactionGuildId
-    } | config.rootRole `elem` roles -> do
-      let
-        reply = replyEphemeral interactionId interactionToken
-        getFN :: Text -> Validation (NonEmpty Text) Schema.User
-        getFN nick =
-          let parseErr = "could not parse " <> nick <> "'s FN"
-           in case Text.splitOn "-" nick of
-                [unparsedName, unparsedFn]
-                  | Just name <- User.Name.parse (Text.dropEnd 1 unparsedName)
-                  , Just fn <- User.FN.parse (Text.drop 1 unparsedFn) ->
-                      Validation.Success $ Schema.User name fn
-                _ -> Validation.Failure $ NonEmpty.singleton parseErr
-      usersMay <-
-        getAllUsers interactionGuildId
-      case usersMay of
-        Left err -> reply $ showText err
-        Right users -> do
-          reply $ "Pre-filter:" <> showText users
-          let
-            -- skip root users, they don't need to be logged
-            notRoot user = config.rootRole `notElem` user.memberRoles
-            -- skip users which have not assigned themselves yet
-            assignedRole user = user.memberRoles /= config.defaultRoles
-            skippedUsers = filter (\user -> notRoot user && assignedRole user) users
-          case traverse getFN $ mapMaybe (.memberNick) skippedUsers of
-            Validation.Failure err -> reply $ Text.unlines $ NonEmpty.toList err
-            Validation.Success users -> do
-              -- TODO: maybe err if missing?
-              liftDb $ Persistent.putMany users
   _ -> return ()
   where
-    replyEphemeral :: DT.InteractionId -> DT.InteractionToken -> Text -> App ()
+    replyEphemeral :: DT.InteractionId -> DT.InteractionToken -> Text -> DiscordHandler ()
     replyEphemeral interactionId interactionToken message =
       printError_ $
         discordCall $
@@ -510,29 +372,3 @@ printError_ =
           Right _ -> pure ()
       )
   )
-
-{- | Fetch all users in the guild.
-Note that simply calling with no 'guildMembersTimingLimit' doesn't work since discord then defaults it to 1.
--}
-getAllUsers :: DT.GuildId -> App (Either D.RestCallErrorCode [DT.GuildMember])
-getAllUsers interactionGuildId = runExceptT $ getBatch 0
-  where
-    getBatch :: DT.UserId -> ExceptT D.RestCallErrorCode App [DT.GuildMember]
-    getBatch lastId = do
-      res <-
-        ExceptT $
-          discordCall $
-            DR.ListGuildMembers
-              interactionGuildId
-              ( DR.GuildMembersTiming
-                  { -- Fetch a 1000 users after lastId, ordered by id.
-                    -- Note that 1000 is the limit discord imposes
-                    guildMembersTimingLimit = Just 1000
-                  , guildMembersTimingAfter = Just lastId
-                  }
-              )
-      if length res < 1000
-        then pure res
-        else case nonEmpty $ mapMaybe (fmap (.userId) . (.memberUser)) res of
-          Nothing -> error "sholdn't happen, checked for length above, and we're fetching users"
-          Just neRes -> (res ++) <$> getBatch (maximum1 neRes)
